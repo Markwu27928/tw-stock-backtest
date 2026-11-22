@@ -1,0 +1,206 @@
+"""模擬測試：用合成市場跑完整流程（抓資料 → 回測 → 報告），並檢查前視偏差。
+
+執行：python -m pytest -q tests
+"""
+from __future__ import annotations
+
+import shutil
+from datetime import date
+
+import numpy as np
+import pandas as pd
+import pytest
+
+from src import backtest, config, report, sources, store, update_data
+from src.features import build_panel, features_at, decision_dates
+from tests.fake_world import World
+
+
+# ---------------------------------------------------------------- 解析器
+def test_parse_mi_index_formats():
+    w = World(end="2015-03-31", n=20)
+    df = sources.parse_mi_index(w._mi_index(date(2015, 3, 2)))
+    assert len(df) == 21 and df["close"].isna().sum() == 1
+    assert df.loc[df.code == "0050", "close"].iloc[0] > 0
+    # 舊格式 fields9 / data9
+    js = w._mi_index(date(2015, 3, 2))
+    t = js.pop("tables")[1]
+    js["fields9"], js["data9"] = t["fields"], t["data"]
+    assert len(sources.parse_mi_index(js)) == 21
+    assert sources.parse_mi_index({"stat": "很抱歉，沒有符合條件的資料!"}) is None
+
+
+def test_parse_t86_old_and_new_field_names():
+    w = World(end="2018-01-31", n=10)
+    old = sources.parse_t86(w._t86(date(2017, 12, 15)))
+    new = sources.parse_t86(w._t86(date(2018, 1, 2)))
+    for df in (old, new):
+        assert list(df.columns) == ["code", "foreign_net", "trust_net"]
+        assert (df["foreign_net"] == 1000).all()      # 不能誤抓到「外資自營商」欄位
+
+
+def test_parse_twt49u_real_sample():
+    # 2024-07 證交所實際回應的欄位與前幾列
+    js = {"stat": "OK", "fields": ["資料日期", "股票代號", "股票名稱", "除權息前收盤價", "除權息參考價", "權值+息值", "權/息",
+                                   "漲停價格", "跌停價格", "開盤競價基準", "減除股利參考價", "詳細資料",
+                                   "最近一次申報資料 季別/日期", "最近一次申報每股 (單位)淨值", "最近一次申報每股 (單位)盈餘"],
+          "data": [["113年07月01日", "1101", "台泥", "34.20", "33.20", "1.000000", "息", "36.50", "29.90", "33.20",
+                    "33.20", "1101,20240701", "x", "30.86", "0.38"]]}
+    df = sources.parse_twt49u(js)
+    assert df.iloc[0].tolist() == ["2024-07-01", "1101", 34.2, 33.2]
+
+
+def test_parse_mops_html_multiheader():
+    w = World(end="2015-03-31", n=12)
+    html = w.http_get("https://x/nas/t21/sii/t21sc03_104_2_0.html").content.decode("cp950")
+    df = sources.parse_mops_revenue(html)
+    assert len(df) == 12 and df["code"].str.fullmatch(r"\d{4}").all()
+    per = pd.Period("2015-02", "M")
+    c = df.iloc[0]["code"]
+    assert abs(df.iloc[0]["rev"] - round(w.rev.at[per, c])) <= 1
+
+
+def test_parse_openapi_revenue():
+    rows = [{"出表日期": "1151117", "資料年月": "11510", "公司代號": "1101", "公司名稱": "台泥", "產業別": "水泥工業",
+             "營業收入-當月營收": "100", "營業收入-上月營收": "90", "營業收入-去年當月營收": "80",
+             "營業收入-上月比較增減(%)": "11", "營業收入-去年同月增減(%)": "25"}]
+    ym, df = sources.parse_openapi_revenue(rows)
+    assert ym == "2026-10" and df.iloc[0][["rev", "rev_prev", "rev_ly"]].tolist() == [100, 90, 80]
+
+
+# ---------------------------------------------------------------- 完整流程
+@pytest.fixture(scope="module")
+def world_env(tmp_path_factory):
+    root = tmp_path_factory.mktemp("bt")
+    mp = pytest.MonkeyPatch()
+    mp.setattr(config, "DATA_DIR", root / "data")
+    mp.setattr(config, "DOCS_DIR", root / "docs")
+    mp.setattr(config, "REQUEST_SLEEP", 0)
+    mp.setattr(config, "MIN_TRAIN_MONTHS", 18)
+    mp.setattr(config, "MIN_VALUE_20", 1_000_000)
+    w = World()
+    mp.setattr(sources, "http_get", w.http_get)
+    mp.setenv("BT_FAKE_NOW", "2019-01-02T18:00")
+    yield root, w, mp
+    mp.undo()
+
+
+def test_incremental_fetch_resumes(world_env, monkeypatch):
+    root, w, _ = world_env
+    # 第一次只允許 300 次請求，模擬時間用完
+    calls = {"n": 0}
+    orig_ok = update_data.Budget.ok
+    def limited(self):
+        calls["n"] += 1
+        return calls["n"] < 300 and orig_ok(self)
+    monkeypatch.setattr(update_data.Budget, "ok", limited)
+    s1 = update_data.run(999)
+    monkeypatch.setattr(update_data.Budget, "ok", orig_ok)
+    assert s1["days_done"] < s1["days_total"]
+    # 最近 20 天優先抓
+    assert store.has_daily("price", date(2018, 12, 31))
+    s2 = update_data.run(999)
+    assert s2["days_done"] >= s2["days_total"] - 1   # 今天（2019-01-02）在合成世界沒有資料
+    assert s2["contiguous_until"] == "2019-01-01"   # 元旦是假日
+    st = store.State.load()
+    assert st.is_holiday(date(2016, 2, 8)) and not st.is_holiday(date(2016, 2, 15))
+    # 第三次不應再發請求（除了當年度除權息）
+    n0 = len(w.calls)
+    update_data.run(999)
+    assert len(w.calls) - n0 <= 2
+
+
+def test_today_not_marked_holiday_before_close(world_env, monkeypatch):
+    monkeypatch.setenv("BT_FAKE_NOW", "2019-01-03T10:00")   # 世界資料只到 2018-12-31
+    update_data.run(5)
+    assert not store.State.load().is_holiday(date(2019, 1, 3))
+    monkeypatch.setenv("BT_FAKE_NOW", "2019-01-03T18:00")   # 收盤後仍無資料 → 今天先不判定假日
+    update_data.run(5)
+    assert not store.State.load().is_holiday(date(2019, 1, 3))
+
+
+def test_dividend_adjustment(world_env):
+    p = build_panel()
+    exd = pd.Timestamp(w_exd := next(d for d in p.dates if d >= pd.Timestamp("2016-07-15")))
+    c = p.close.columns[10]
+    raw = p.close.at[exd, c] / p.close.shift(1).at[exd, c] - 1
+    adj = p.ret.at[exd, c]
+    assert adj > raw + 0.02      # 還原後不應出現 3% 的假跌幅
+
+
+def test_backtest_finds_planted_signal(world_env):
+    root, w, _ = world_env
+    p = build_panel()
+    bt = backtest.run_backtest(p)
+    res = bt["results"]
+    assert res["A"] and res["C"]
+    sa, sc = backtest.summarize(res["A"]), backtest.summarize(res["C"])
+    print("A", sa, "\nC", sc)
+    assert sa["pick_hit"] > sa["baseline_hit"] + 0.05
+    assert sc["pick_hit"] > sc["baseline_hit"] + 0.05
+    # 每月 10 檔、日期順序正確
+    for r in res["B"]:
+        assert len(r["picks"]) == config.TOP_N
+        assert r["decision"] < r["entry"] < r["exit"]
+    # 下市股票被納入（無存活者偏差），下市後不會再被選到
+    months_with_delisted = [r for r in res["A"] if any(pk["code"] in w.delisted for pk in r["picks"])]
+    assert all(r["decision"] < pd.Timestamp(w.delist_date) for r in months_with_delisted)
+    data = report.build(p, bt, {"days_done": 10, "days_total": 10, "contiguous_until": "2018-12-31", "log": ["ok"]})
+    report.write(data)
+    html = (config.DOCS_DIR / "index.html").read_text("utf-8")
+    assert "策略比較" in html and "本月持股" in html and "NaN" not in html
+
+
+def test_no_lookahead(world_env, tmp_path):
+    """把 2017-12 以後的股價、法人、營收全部打亂，之前已結束月份的結果必須完全一樣。"""
+    p = build_panel()
+    base = backtest.run_backtest(p)
+    cut = pd.Timestamp("2017-12-01")
+    backup = tmp_path / "data"
+    shutil.copytree(config.DATA_DIR, backup)
+    try:
+        rng = np.random.default_rng(1)
+        for kind in ("price", "t86"):
+            for f in (config.DATA_DIR / kind).glob("*/*.csv.gz"):
+                if pd.Timestamp(f.name[:8]) >= cut:
+                    df = pd.read_csv(f, dtype={"code": str})
+                    for col in ("close", "trust_net", "foreign_net"):
+                        if col in df:
+                            df[col] = df[col] * rng.uniform(0.5, 1.5, len(df))
+                    df.to_csv(f, index=False, compression="gzip")
+        for f in (config.DATA_DIR / "rev").glob("*.csv.gz"):
+            if pd.Period(f.name[:7], "M") >= pd.Period("2017-11", "M"):
+                df = pd.read_csv(f, dtype={"code": str})
+                df["rev"] = df["rev"] * rng.uniform(0.2, 3, len(df))
+                df.to_csv(f, index=False, compression="gzip")
+        p2 = build_panel()
+        alt = backtest.run_backtest(p2)
+        for s in base["results"]:
+            a = [r for r in base["results"][s] if r["exit"] < cut]
+            b = [r for r in alt["results"][s] if r["exit"] < cut]
+            assert len(a) == len(b) and len(a) > 0
+            for x, y in zip(a, b):
+                assert [k["code"] for k in x["picks"]] == [k["code"] for k in y["picks"]], (s, x["month"])
+                assert np.allclose([k["ret"] for k in x["picks"]], [k["ret"] for k in y["picks"]])
+    finally:
+        shutil.rmtree(config.DATA_DIR)
+        shutil.copytree(backup, config.DATA_DIR)
+
+
+def test_pure_noise_market_shows_no_edge(tmp_path, monkeypatch):
+    """沒有任何訊號的市場：三個策略的勝率都應該接近隨機基準，不能憑空做出 6 成。"""
+    monkeypatch.setattr(config, "DATA_DIR", tmp_path / "data")
+    monkeypatch.setattr(config, "DOCS_DIR", tmp_path / "docs")
+    monkeypatch.setattr(config, "REQUEST_SLEEP", 0)
+    monkeypatch.setattr(config, "MIN_TRAIN_MONTHS", 18)
+    monkeypatch.setattr(config, "MIN_VALUE_20", 1_000_000)
+    w = World(signal=0.0, trust_effect=0.0, seed=11)
+    monkeypatch.setattr(sources, "http_get", w.http_get)
+    monkeypatch.setenv("BT_FAKE_NOW", "2019-01-02T18:00")
+    update_data.run(999)
+    res = backtest.run_backtest(build_panel())["results"]
+    for s, rows in res.items():
+        sm = backtest.summarize(rows)
+        print(s, round(sm["pick_hit"], 3), round(sm["baseline_hit"], 3), round(sm["t_stat"], 2))
+        assert abs(sm["pick_hit"] - sm["baseline_hit"]) < 0.08
+        assert sm["pick_hit"] < config.TARGET_HIT
