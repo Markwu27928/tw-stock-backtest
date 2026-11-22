@@ -1,0 +1,108 @@
+<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow">
+<title>台股 20 日預測回測</title><style>
+.viz-root{color-scheme:light;--surface-0:#f4f4f2;--surface-1:#fcfcfb;--border:#e2e1dc;--text-primary:#0b0b0b;
+--text-secondary:#52514e;--text-muted:#7a7974;--series-1:#2a78d6;--series-2:#eb6834;--series-3:#1baf7a;
+--good:#0a7d32;--bad:#c42b2b;--grid:#ecebe7}
+@media (prefers-color-scheme:dark){:root:where(:not([data-theme="light"])) .viz-root{color-scheme:dark;--surface-0:#111110;
+--surface-1:#1a1a19;--border:#33322f;--text-primary:#f0efec;--text-secondary:#c3c2b7;--text-muted:#8f8e86;
+--series-1:#3987e5;--series-2:#d95926;--series-3:#199e70;--good:#3fbf6a;--bad:#ef6b6b;--grid:#2a2a28}}
+*{box-sizing:border-box}body{margin:0}
+.viz-root{background:var(--surface-0);color:var(--text-primary);font:15px/1.55 -apple-system,"PingFang TC","Noto Sans TC","Microsoft JhengHei",sans-serif;min-height:100vh}
+main{max-width:760px;margin:0 auto;padding:16px 14px 48px}
+h1{font-size:20px;margin:4px 0 2px}h2{font-size:17px;margin:0 0 10px}
+.sub{color:var(--text-secondary);font-size:13px}
+.card{background:var(--surface-1);border:1px solid var(--border);border-radius:12px;padding:14px;margin:14px 0}
+.kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.kpi{border:1px solid var(--border);border-radius:10px;padding:10px}
+.kpi .v{font-size:22px;font-weight:650;font-variant-numeric:tabular-nums}
+.kpi .l{font-size:12px;color:var(--text-secondary)}
+.sw{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px;vertical-align:baseline}
+table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums;font-size:14px}
+th,td{padding:7px 6px;border-bottom:1px solid var(--grid);text-align:right;white-space:nowrap}
+th:first-child,td:first-child{text-align:left}th{color:var(--text-secondary);font-weight:500;font-size:12px}
+.scroll{overflow-x:auto}
+.ok{color:var(--good);font-weight:600}.no{color:var(--text-secondary)}
+.pos{color:var(--good)}.neg{color:var(--bad)}
+.tabs{display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap}
+.tabs button{border:1px solid var(--border);background:transparent;color:var(--text-primary);border-radius:999px;padding:5px 12px;font:inherit;font-size:13px}
+.tabs button[aria-pressed=true]{background:var(--text-primary);color:var(--surface-1)}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--text-secondary);margin:4px 0 6px}
+.chart{position:relative}.chart svg{display:block;width:100%;height:auto;overflow:visible}
+.tip{position:absolute;pointer-events:none;background:var(--surface-1);border:1px solid var(--border);border-radius:8px;
+padding:6px 8px;font-size:12px;box-shadow:0 2px 8px rgba(0,0,0,.12);display:none;white-space:nowrap;z-index:2}
+.note{font-size:12px;color:var(--text-muted)}
+.bar{height:8px;background:var(--grid);border-radius:4px;overflow:hidden}.bar>i{display:block;height:100%;background:var(--series-1)}
+details summary{cursor:pointer;color:var(--text-secondary);font-size:13px}
+</style></head>
+<body><div class="viz-root"><main>
+<h1>台股 20 日選股回測</h1>
+<div class="sub">資料至 2026-11-20・更新於 2026-11-23 02:36・每月選 10 檔・來回成本 0.585%</div>
+
+<section class="card"><h2>是否達到 6 成</h2><p>歷史資料回補中，回測結果尚未產生。</p></section>
+
+<section class="card"><h2>策略比較（共同期間）</h2><div class="scroll"><table><tr><th>策略</th><th>選股勝率</th><th>近12月</th><th>月勝率</th><th>年化</th><th>0050年化</th><th>最大回撤</th><th>t值</th></tr><tr><td><span class='sw' style='background:var(--series-1)'></span>A 月營收年增率單因子</td><td colspan=7 class='no'>資料不足</td></tr><tr><td><span class='sw' style='background:var(--series-2)'></span>B 多因子綜合分數</td><td colspan=7 class='no'>資料不足</td></tr><tr><td><span class='sw' style='background:var(--series-3)'></span>C LightGBM 機器學習</td><td colspan=7 class='no'>資料不足</td></tr></table></div>
+<p class="note">選股勝率＝選中個股（扣成本）跑贏 0050 的比例。t 值 &gt; 2 代表勝率明顯高於隨機選股，不太可能是運氣。</p>
+<details><summary>各策略完整期間</summary><div class="scroll"><table><tr><th>策略</th><th>選股勝率</th><th>近12月</th><th>月勝率</th><th>年化</th><th>0050年化</th><th>最大回撤</th><th>t值</th></tr><tr><td><span class='sw' style='background:var(--series-1)'></span>A 月營收年增率單因子</td><td colspan=7 class='no'>資料不足</td></tr><tr><td><span class='sw' style='background:var(--series-2)'></span>B 多因子綜合分數</td><td colspan=7 class='no'>資料不足</td></tr><tr><td><span class='sw' style='background:var(--series-3)'></span>C LightGBM 機器學習</td><td colspan=7 class='no'>資料不足</td></tr></table></div></details></section>
+
+<section class="card"><h2>近 12 個月選股勝率</h2><div class="legend"><span><span class='sw' style='background:var(--series-1)'></span>A 月營收年增率單因子</span><span><span class='sw' style='background:var(--series-2)'></span>B 多因子綜合分數</span><span><span class='sw' style='background:var(--series-3)'></span>C LightGBM 機器學習</span><span>虛線＝全市場平均</span></div>
+<div class="chart" id="c-hit"></div></section>
+
+<section class="card"><h2>累積淨值</h2><div class="legend"><span><span class='sw' style='background:var(--series-1)'></span>A 月營收年增率單因子</span><span><span class='sw' style='background:var(--series-2)'></span>B 多因子綜合分數</span><span><span class='sw' style='background:var(--series-3)'></span>C LightGBM 機器學習</span><span>虛線＝0050</span></div>
+<div class="chart" id="c-nav"></div></section>
+
+<section class="card"><h2>本月持股</h2><p class='note'>尚無本月持股（資料回補中或今天還沒到決策日）。</p></section>
+<section class="card"><h2>上個完整月份結果</h2><p class='note'>尚無資料。</p></section>
+
+<section class="card"><h2>逐年選股勝率</h2><div class="scroll"><table><tr><th>年度</th><th>A 勝率</th><th>B 勝率</th><th>C 勝率</th><th>0050</th></tr></table></div></section>
+
+<section class="card"><h2>資料狀態</h2>
+<div class="bar"><i style="width:63.8%"></i></div>
+<p class="sub">歷史交易日 1979/3100（64%），連續完整至 2022-07-07。最近一次抓取 2026-11-22T21:06+08:00。</p>
+<details><summary>抓取紀錄</summary><ul class="note"><li>除權息 2023：1086 筆</li><li>除權息 2024：1184 筆</li><li>除權息 2025：1358 筆</li><li>除權息 2026：1446 筆</li><li>錯誤：https://mops.twse.com.tw/nas/t21/sii/t21sc03_103_9_0.html: HTTP 404</li><li>錯誤：https://mops.twse.com.tw/nas/t21/sii/t21sc03_103_10_0.html: HTTP 404</li><li>錯誤：https://mops.twse.com.tw/nas/t21/sii/t21sc03_103_11_0.html: HTTP 404</li><li>公開資訊觀測站連不上，月營收改用 FinMind 逐檔回補</li><li>月營收 2026-10（OpenAPI）：1090 家</li><li>每日行情新增 1845 天、法人新增 1845 天</li></ul></details></section>
+
+<p class="note">僅供研究，不構成投資建議。回測未計入流動性衝擊與減資等特殊事件；過去績效不代表未來。</p>
+</main></div>
+<script type="application/json" id="data">{"generated": "2026-11-23 02:36", "data_until": "2026-11-20", "update": {"run_at": "2026-11-22T21:06+08:00", "log": ["除權息 2015：747 筆", "除權息 2016：734 筆", "除權息 2017：781 筆", "除權息 2018：825 筆", "除權息 2019：880 筆", "除權息 2020：888 筆", "除權息 2021：973 筆", "除權息 2022：1027 筆", "除權息 2023：1086 筆", "除權息 2024：1184 筆", "除權息 2025：1358 筆", "除權息 2026：1446 筆", "錯誤：https://mops.twse.com.tw/nas/t21/sii/t21sc03_103_9_0.html: HTTP 404", "錯誤：https://mops.twse.com.tw/nas/t21/sii/t21sc03_103_10_0.html: HTTP 404", "錯誤：https://mops.twse.com.tw/nas/t21/sii/t21sc03_103_11_0.html: HTTP 404", "公開資訊觀測站連不上，月營收改用 FinMind 逐檔回補", "月營收 2026-10（OpenAPI）：1090 家", "每日行情新增 1845 天、法人新增 1845 天"], "contiguous_until": "2022-07-07", "days_done": 1979, "days_total": 3100}, "config": {"top_n": 10, "cost": 0.00585, "bench": "0050", "target": 0.6, "min_value": 20000000, "min_price": 10.0}, "summary_full": {"A": {}, "B": {}, "C": {}}, "summary_common": {"A": {}, "B": {}, "C": {}}, "years": {"A": [], "B": [], "C": []}, "chart": {"x": [], "hit": {"A": [], "B": [], "C": []}, "baseline": [], "nav": {"A": [], "B": [], "C": []}, "bench_nav": []}, "live": {}, "last_month": {}, "names": {"A": "月營收年增率單因子", "B": "多因子綜合分數", "C": "LightGBM 機器學習"}, "colors": {"A": "var(--series-1)", "B": "var(--series-2)", "C": "var(--series-3)"}}</script>
+<script>
+const D = JSON.parse(document.getElementById('data').textContent);
+function css(v){return getComputedStyle(document.querySelector('.viz-root')).getPropertyValue(v).trim()}
+function lineChart(el, o){
+  const W=700,H=380,L=56,R=10,T=14,B=30, n=o.x.length; if(!n){el.innerHTML='<p class="note">資料不足</p>';return;}
+  const all=o.series.flatMap(s=>s.values).filter(v=>v!=null).concat(o.refs?o.refs.map(r=>r.y):[]);
+  let lo=Math.min(...all),hi=Math.max(...all); if(o.yMin!=null)lo=Math.min(lo,o.yMin); const pad=(hi-lo)*0.08||0.05; lo-=pad;hi+=pad;
+  const X=i=>L+(W-L-R)*(n==1?0.5:i/(n-1)), Y=v=>T+(H-T-B)*(1-(v-lo)/(hi-lo));
+  let s=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${o.label}">`;
+  for(let k=0;k<=4;k++){const v=lo+(hi-lo)*k/4;s+=`<line x1="${L}" x2="${W-R}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--grid)"/>`+
+    `<text x="${L-6}" y="${Y(v)+4}" text-anchor="end" font-size="16" fill="var(--text-muted)">${o.fmt(v)}</text>`;}
+  const step=Math.max(1,Math.ceil(n/6));for(let i=0;i<n;i+=step)s+=`<text x="${X(i)}" y="${H-6}" text-anchor="middle" font-size="16" fill="var(--text-muted)">${o.x[i]}</text>`;
+  (o.refs||[]).forEach(r=>{s+=`<line x1="${L}" x2="${W-R}" y1="${Y(r.y)}" y2="${Y(r.y)}" stroke="var(--text-secondary)" stroke-dasharray="5 4"/>`+
+    `<text x="${W-R}" y="${Y(r.y)-5}" text-anchor="end" font-size="16" fill="var(--text-secondary)">${r.label}</text>`});
+  o.series.forEach(se=>{let d='',pen=false;se.values.forEach((v,i)=>{if(v==null){pen=false;return}d+=(pen?'L':'M')+X(i).toFixed(1)+' '+Y(v).toFixed(1);pen=true});
+    s+=`<path d="${d}" fill="none" stroke="${se.color}" stroke-width="2" ${se.dash?'stroke-dasharray="3 3"':''} stroke-linejoin="round"/>`;});
+  s+=`<line class="xh" y1="${T}" y2="${H-B}" stroke="var(--text-muted)" visibility="hidden"/>`;
+  o.series.forEach((se,k)=>{s+=`<circle class="dot${k}" r="4" fill="${se.color}" stroke="var(--surface-1)" stroke-width="2" visibility="hidden"/>`});
+  s+=`<rect x="${L}" y="${T}" width="${W-L-R}" height="${H-T-B}" fill="transparent"/></svg><div class="tip"></div>`;
+  el.innerHTML=s; const svg=el.querySelector('svg'),tip=el.querySelector('.tip'),xh=svg.querySelector('.xh');
+  function move(ev){const p=ev.touches?ev.touches[0]:ev,b=svg.getBoundingClientRect(),sx=(p.clientX-b.left)*W/b.width;
+    let i=Math.round((sx-L)/(W-L-R)*(n-1));i=Math.max(0,Math.min(n-1,i));
+    xh.setAttribute('x1',X(i));xh.setAttribute('x2',X(i));xh.setAttribute('visibility','visible');
+    let h=`<b>${o.x[i]}</b>`;o.series.forEach((se,k)=>{const c=svg.querySelector('.dot'+k),v=se.values[i];
+      if(v==null){c.setAttribute('visibility','hidden');return}c.setAttribute('cx',X(i));c.setAttribute('cy',Y(v));c.setAttribute('visibility','visible');
+      h+=`<br><span class="sw" style="background:${se.color}"></span>${se.name}：${o.fmt(v)}`});
+    tip.innerHTML=h;tip.style.display='block';const left=X(i)/W*b.width;tip.style.left=Math.min(Math.max(0,left-60),b.width-150)+'px';tip.style.top='0px';}
+  function out(){tip.style.display='none';xh.setAttribute('visibility','hidden');o.series.forEach((_,k)=>svg.querySelector('.dot'+k).setAttribute('visibility','hidden'))}
+  svg.addEventListener('mousemove',move);svg.addEventListener('touchmove',move,{passive:true});svg.addEventListener('mouseleave',out);svg.addEventListener('touchend',out);
+}
+const NAMES=D.names, COL=D.colors;
+const pctf=v=>(v*100).toFixed(0)+'%';
+const hitSeries=Object.keys(D.chart.hit).filter(s=>D.chart.hit[s].length).map(s=>({name:s+' '+NAMES[s],color:COL[s],values:D.chart.hit[s]}));
+hitSeries.push({name:'全市場平均',color:'var(--text-muted)',values:D.chart.baseline,dash:true});
+lineChart(document.getElementById('c-hit'),{x:D.chart.x,series:hitSeries,fmt:pctf,refs:[{y:D.config.target,label:'目標 60%'}],label:'近12個月選股勝率'});
+const navSeries=Object.keys(D.chart.nav).filter(s=>D.chart.nav[s].length).map(s=>({name:s+' '+NAMES[s],color:COL[s],values:D.chart.nav[s]}));
+navSeries.push({name:D.config.bench,color:'var(--text-muted)',values:D.chart.bench_nav,dash:true});
+lineChart(document.getElementById('c-nav'),{x:D.chart.x,series:navSeries,fmt:v=>v.toFixed(2),label:'累積淨值'});
+document.querySelectorAll('.tabs').forEach(t=>t.addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;
+  t.querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed',x===b));
+  const grp=t.dataset.group;document.querySelectorAll('[data-pane="'+grp+'"]').forEach(p=>p.hidden=p.dataset.key!==b.dataset.key)}));
+</script></body></html>
