@@ -153,26 +153,70 @@ def parse_taifex_csv(text: str) -> pd.DataFrame:
     return near[["date", "session", "close"]]
 
 
-def fetch_taifex(start: date, end: date) -> pd.DataFrame:
-    """期交所一次最多查一個月。"""
-    out = []
-    s = start
-    while s <= end:
-        e = min(end, (pd.Timestamp(s) + pd.offsets.MonthEnd(0)).date())
-        time.sleep(1.5)
+def fetch_taifex_month(s: date, e: date, tries: int = 3) -> pd.DataFrame:
+    """期交所一次最多查一個月；失敗重試。"""
+    last = None
+    for k in range(tries):
+        time.sleep(1.5 + 3 * k)
         try:
             r = requests.post(TAIFEX_DL, data={"down_type": "1", "commodity_id": "TX",
                                                "queryStartDate": s.strftime("%Y/%m/%d"),
                                                "queryEndDate": e.strftime("%Y/%m/%d")},
-                              headers=sources.HEADERS, timeout=60)
+                              headers=dict(sources.HEADERS, Referer="https://www.taifex.com.tw/cht/3/futDailyMarketView"),
+                              timeout=60)
         except requests.RequestException as ex:
-            raise FetchError(f"期交所：{ex}") from ex
+            last = f"期交所：{ex}"
+            continue
         if r.status_code != 200:
-            raise FetchError(f"期交所：HTTP {r.status_code}")
+            last = f"期交所：HTTP {r.status_code}"
+            continue
         text = r.content.decode("cp950", errors="replace")
-        if "交易日期" in text:
-            out.append(parse_taifex_csv(text))
+        return parse_taifex_csv(text) if "交易日期" in text else pd.DataFrame(columns=["date", "session", "close"])
+    raise FetchError(last or "期交所：未知錯誤")
+
+
+def month_ranges(start: date, end: date) -> list[tuple[date, date]]:
+    out, s = [], start
+    while s <= end:
+        e = min(end, (pd.Timestamp(s) + pd.offsets.MonthEnd(0)).date())
+        out.append((s, e))
         s = e + timedelta(days=1)
+    return out
+
+
+# FinMind 台指期（期交所抓不到時的備援）
+FINMIND = "https://api.finmindtrade.com/api/v4/data"
+
+
+def parse_finmind_futures(js: dict) -> pd.DataFrame:
+    rows = (js or {}).get("data") or []
+    if not rows:
+        return pd.DataFrame(columns=["date", "session", "close"])
+    df = pd.DataFrame(rows)
+    df["contract_date"] = df["contract_date"].astype(str).str.strip()
+    df = df[df["contract_date"].str.fullmatch(r"\d{6}")]
+    sess = df["trading_session"].astype(str) if "trading_session" in df else pd.Series("position", index=df.index)
+    df["session"] = np.where(sess.str.contains("after"), "night", "day")
+    df["close"] = pd.to_numeric(df["close"], errors="coerce")
+    df = df[df["close"] > 0]
+    near = df.sort_values("contract_date").groupby(["date", "session"], as_index=False).first()
+    return near[["date", "session", "close"]]
+
+
+def fetch_finmind_futures(start: date, end: date, token: str | None) -> pd.DataFrame:
+    out = []
+    for y in range(start.year, end.year + 1):
+        s, e = max(start, date(y, 1, 1)), min(end, date(y, 12, 31))
+        time.sleep(1.0)
+        try:
+            r = requests.get(FINMIND, params={"dataset": "TaiwanFuturesDaily", "data_id": "TX",
+                                              "start_date": s.isoformat(), "end_date": e.isoformat()},
+                             headers={"Authorization": f"Bearer {token}"} if token else {}, timeout=60)
+        except requests.RequestException as ex:
+            raise FetchError(f"FinMind 期貨：{ex}") from ex
+        if r.status_code != 200:
+            raise FetchError(f"FinMind 期貨：HTTP {r.status_code}")
+        out.append(parse_finmind_futures(r.json()))
     return pd.concat(out, ignore_index=True) if out else pd.DataFrame(columns=["date", "session", "close"])
 
 

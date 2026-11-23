@@ -56,6 +56,8 @@ jobs:
           echo "任務：$T"
 
       - name: 執行
+        env:
+          FINMIND_TOKEN: ${{ secrets.FINMIND_TOKEN }}
         run: |
           F=""; [ "${{ github.event.inputs.force }}" = "true" ] && F="--force"
           python -m src.market ${{ steps.t.outputs.task }} $F --minutes 320
@@ -65,7 +67,8 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add data/market docs/today.html
+          [ -d data/market ] && git add data/market
+          [ -f docs/today.html ] && git add docs/today.html
           git diff --cached --quiet && exit 0
           git commit -q -m "盤勢 ${{ steps.t.outputs.task }} $(TZ=Asia/Taipei date '+%F %H:%M')"
           for i in 1 2 3 4; do

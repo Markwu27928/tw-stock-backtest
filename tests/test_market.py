@@ -48,6 +48,16 @@ def test_parse_taifex_picks_near_month_not_weekly():
                                      {"date": "2026-11-24", "session": "night", "close": 20150.0}]
 
 
+def test_parse_finmind_futures():
+    js = {"data": [{"date": "2026-11-23", "futures_id": "TX", "contract_date": "202612", "close": 20000, "trading_session": "position"},
+                   {"date": "2026-11-23", "futures_id": "TX", "contract_date": "202612/202701", "close": 5, "trading_session": "position"},
+                   {"date": "2026-11-23", "futures_id": "TX", "contract_date": "202701", "close": 20100, "trading_session": "position"},
+                   {"date": "2026-11-24", "futures_id": "TX", "contract_date": "202612", "close": 20150, "trading_session": "after_market"}]}
+    df = S.parse_finmind_futures(js)
+    assert df.to_dict("records") == [{"date": "2026-11-23", "session": "day", "close": 20000.0},
+                                     {"date": "2026-11-24", "session": "night", "close": 20150.0}]
+
+
 def test_parse_yahoo():
     js = {"chart": {"result": [{"meta": {"gmtoffset": -18000}, "timestamp": [1763643000, 1763729400],
                                 "indicators": {"quote": [{"close": [6600.5, None]}]}}]}}

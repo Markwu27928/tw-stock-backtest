@@ -110,9 +110,25 @@ def _append_intraday(rows):
 
 
 def update_taifex(start: date, end: date) -> None:
-    new = S.fetch_taifex(start, end)
-    if len(new):
-        _save_csv(pd.concat([_csv("taifex.csv"), new], ignore_index=True), "taifex.csv", ["date", "session"])
+    """期交所逐月抓、失敗重試；仍失敗的月份改用 FinMind 補。都失敗只發警告，不中斷其他工作。"""
+    failed = []
+    for s, e in S.month_ranges(start, end):
+        try:
+            new = S.fetch_taifex_month(s, e)
+        except FetchError as ex:
+            print("期交所失敗", s, ex)
+            failed.append((s, e))
+            continue
+        if len(new):
+            _save_csv(pd.concat([_csv("taifex.csv"), new], ignore_index=True), "taifex.csv", ["date", "session"])
+    if failed:
+        s, e = failed[0][0], failed[-1][1]
+        try:
+            new = S.fetch_finmind_futures(s, e, os.getenv("FINMIND_TOKEN"))
+            _save_csv(pd.concat([_csv("taifex.csv"), new], ignore_index=True), "taifex.csv", ["date", "session"])
+            print(f"期交所有 {len(failed)} 個月抓不到，已改用 FinMind 補上 {len(new)} 列")
+        except FetchError as ex:
+            warn(f"台指期資料抓不到（期交所 {len(failed)} 個月失敗，FinMind 也失敗：{ex}）")
 
 
 def update_us(range_: str) -> None:
@@ -197,7 +213,10 @@ def task_preopen(force=False) -> None:
         print("週末不開盤")
         return
     update_taifex(today - timedelta(days=12), today)
-    update_us("1mo")
+    try:
+        update_us("1mo")
+    except FetchError as e:
+        warn(f"美股資料抓不到：{e}")
     catch_up(today)
     ds, lag, stats, method = preopen_model()
     intr, tx, us = _load_all()
@@ -410,7 +429,10 @@ def task_flows(force=False) -> None:
 def task_backfill(minutes: float) -> None:
     t0 = time.time()
     today = now().date()
-    update_us("15y")
+    try:
+        update_us("15y")
+    except FetchError as e:
+        warn(f"美股資料抓不到：{e}")
     update_taifex(date(2017, 5, 1), today)
     days = [d for d in trading_days_from_store() if d >= date(2016, 1, 1) and d < today]
     left = minutes - (time.time() - t0) / 60
