@@ -115,11 +115,11 @@ def _rolling_baseline(rows, window=12):
 # ---------------------------------------------------------------- HTML
 CSS = """
 .viz-root{color-scheme:light;--surface-0:#f4f4f2;--surface-1:#fcfcfb;--border:#e2e1dc;--text-primary:#0b0b0b;
---text-secondary:#52514e;--text-muted:#7a7974;--series-1:#2a78d6;--series-2:#eb6834;--series-3:#1baf7a;
---good:#0a7d32;--bad:#c42b2b;--grid:#ecebe7}
+--text-secondary:#52514e;--text-muted:#7a7974;--series-1:#2a78d6;--series-2:#eb6834;--series-3:#8a5cf5;
+--good:#0a7d32;--bad:#c42b2b;--up:#d12f2f;--down:#13854a;--grid:#ecebe7}
 @media (prefers-color-scheme:dark){:root:where(:not([data-theme="light"])) .viz-root{color-scheme:dark;--surface-0:#111110;
 --surface-1:#1a1a19;--border:#33322f;--text-primary:#f0efec;--text-secondary:#c3c2b7;--text-muted:#8f8e86;
---series-1:#3987e5;--series-2:#d95926;--series-3:#199e70;--good:#3fbf6a;--bad:#ef6b6b;--grid:#2a2a28}}
+--series-1:#3987e5;--series-2:#d95926;--series-3:#8a5cf5;--good:#3fbf6a;--bad:#ef6b6b;--up:#f26d6d;--down:#3fbf6a;--grid:#2a2a28}}
 *{box-sizing:border-box}body{margin:0}
 .viz-root{background:var(--surface-0);color:var(--text-primary);font:15px/1.55 -apple-system,"PingFang TC","Noto Sans TC","Microsoft JhengHei",sans-serif;min-height:100vh}
 main{max-width:760px;margin:0 auto;padding:16px 14px 48px}
@@ -132,11 +132,16 @@ h1{font-size:20px;margin:4px 0 2px}h2{font-size:17px;margin:0 0 10px}
 .kpi .l{font-size:12px;color:var(--text-secondary)}
 .sw{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px;vertical-align:baseline}
 table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums;font-size:14px}
-th,td{padding:7px 6px;border-bottom:1px solid var(--grid);text-align:right;white-space:nowrap}
+th,td{padding:7px 4px;border-bottom:1px solid var(--grid);text-align:right;white-space:nowrap}
 th:first-child,td:first-child{text-align:left}th{color:var(--text-secondary);font-weight:500;font-size:12px}
 .scroll{overflow-x:auto}
 .ok{color:var(--good);font-weight:600}.no{color:var(--text-secondary)}
-.pos{color:var(--good)}.neg{color:var(--bad)}
+.up{color:var(--up)}.down{color:var(--down)}
+.verdict{border-radius:10px;padding:12px;margin-bottom:12px;border:2px solid var(--border)}
+.verdict .t{font-size:19px;font-weight:700;margin-bottom:4px}
+.verdict.go{border-color:var(--up)}.verdict.watch{border-color:var(--series-2)}.verdict.no{border-color:var(--text-muted)}
+.verdict ul{margin:6px 0 0;padding-left:20px;font-size:14px}
+.win{font-weight:600}.lose{color:var(--text-secondary)}
 .tabs{display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap}
 .tabs button{border:1px solid var(--border);background:transparent;color:var(--text-primary);border-radius:999px;padding:5px 12px;font:inherit;font-size:13px}
 .tabs button[aria-pressed=true]{background:var(--text-primary);color:var(--surface-1)}
@@ -193,18 +198,112 @@ document.querySelectorAll('.tabs').forEach(t=>t.addEventListener('click',e=>{con
 """
 
 
-def _picks_table(picks, show_ret=True, bench=None):
+def _sign_cls(x):
+    """台股習慣：紅漲綠跌。"""
+    if x is None or (isinstance(x, float) and math.isnan(x)):
+        return ""
+    return "up" if x > 0 else "down" if x < 0 else ""
+
+
+def _vs_bench(r, bench):
+    if r is None or bench is None:
+        return "<td>—</td>"
+    d = r - bench
+    return (f"<td class='win'>贏 {abs(d) * 100:.1f}</td>" if d > 0
+            else f"<td class='lose'>輸 {abs(d) * 100:.1f}</td>")
+
+
+def _picks_table(picks, show_ret=True, bench=None, bench_name="0050"):
     rows = []
+    has_yoy = bool(picks) and "rev_yoy" in picks[0]
     for pk in picks:
         r = pk.get("ret")
-        cls = "" if r is None else ("pos" if bench is not None and r > bench else "neg" if bench is not None else "")
         rows.append(
             f"<tr><td>{html.escape(pk['code'])} {html.escape(pk['name'])}</td>"
-            + (f"<td>{_pct(pk.get('rev_yoy'), 0, True)}</td>" if "rev_yoy" in pk else "")
-            + (f"<td class='{cls}'>{_pct(r, 1, True)}</td>" if show_ret else "") + "</tr>")
-    head = "<tr><th>股票</th>" + ("<th>營收YoY</th>" if picks and "rev_yoy" in picks[0] else "") + \
-           ("<th>報酬(扣成本)</th>" if show_ret else "") + "</tr>"
-    return f"<div class='scroll'><table>{head}{''.join(rows)}</table></div>"
+            + (f"<td>{_pct(pk.get('rev_yoy'), 0, True)}</td>" if has_yoy else "")
+            + (f"<td class='{_sign_cls(r)}'>{_pct(r, 1, True)}</td>{_vs_bench(r, bench)}" if show_ret else "")
+            + "</tr>")
+    head = "<tr><th>股票</th>" + ("<th>營收年增</th>" if has_yoy else "") + \
+           (f"<th>報酬</th><th>vs {bench_name}</th>" if show_ret else "") + "</tr>"
+    note = (f"<p class='note'>報酬已扣手續費與證交稅；vs {bench_name} 為與 {bench_name} 相差的百分點。</p>"
+            if show_ret else "")
+    return f"<div class='scroll'><table>{head}{''.join(rows)}</table></div>{note}"
+
+
+MIN_MONTHS_FOR_VERDICT = 24
+
+
+def verdict(data: dict) -> dict:
+    """依回測結果給出結論。
+
+    go    ：選股勝率 ≥ 60%、t 值 ≥ 2、年化報酬贏 0050 → 可參考本月清單
+    watch ：勝率明顯高於隨機（t ≥ 2）且年化贏 0050，但未達 6 成 → 只觀察
+    no    ：沒有策略穩定勝過隨機選股 → 不建議依清單買進
+    """
+    target = data["config"]["target"]
+    com = {s: sm for s, sm in data["summary_common"].items()
+           if sm and (sm.get("months") or 0) >= MIN_MONTHS_FOR_VERDICT}
+    if not com:
+        return {"level": "wait", "strategy": None}
+
+    def beats(sm):
+        return (sm.get("cagr") or -9) > (sm.get("bench_cagr") or 9)
+
+    def sig(sm):
+        return (sm.get("t_stat") or 0) >= 2
+
+    go = [s for s, sm in com.items() if sm["pick_hit"] >= target and sig(sm) and beats(sm)]
+    if go:
+        s = max(go, key=lambda k: com[k]["pick_hit"])
+        return {"level": "go", "strategy": s, "sm": com[s]}
+    watch = [s for s, sm in com.items() if sig(sm) and beats(sm) and sm["pick_hit"] > sm["baseline_hit"]]
+    if watch:
+        s = max(watch, key=lambda k: com[k]["pick_hit"])
+        return {"level": "watch", "strategy": s, "sm": com[s]}
+    s = max(com, key=lambda k: com[k]["pick_hit"])
+    return {"level": "no", "strategy": s, "sm": com[s]}
+
+
+def _next_exit_hint(decision: str) -> str:
+    """下次換股日的大約日期（下月 11 日起第一個平日的下一個平日；未計國定假日）。"""
+    d = pd.Timestamp(decision) + pd.offsets.MonthBegin(1) + pd.Timedelta(days=config.REBALANCE_DAY - 1)
+    while d.weekday() >= 5:
+        d += pd.Timedelta(days=1)
+    d += pd.Timedelta(days=1)
+    while d.weekday() >= 5:
+        d += pd.Timedelta(days=1)
+    return d.strftime("%Y-%m-%d")
+
+
+def _verdict_html(data: dict) -> str:
+    v = verdict(data)
+    bench = data["config"]["bench"]
+    names = STRATEGIES
+    if v["level"] == "wait":
+        return ("<div class='verdict no'><div class='t'>結論：資料還不夠，暫時沒有結論</div>"
+                f"<p class='sub'>回測需要至少 {MIN_MONTHS_FOR_VERDICT} 個月的結果才會判斷。</p></div>")
+    s, sm = v["strategy"], v["sm"]
+    stats = (f"<ul><li>選股勝率 {_pct(sm['pick_hit'])}（目標 60%，隨機選股 {_pct(sm['baseline_hit'])}）</li>"
+             f"<li>年化報酬 {_pct(sm['cagr'], 1, True)}，同期 {bench} {_pct(sm['bench_cagr'], 1, True)}</li>"
+             f"<li>t 值 {_num(sm['t_stat'])}（≥ 2 才算不是運氣）・回測 {sm['months']} 個月</li></ul>")
+    title = {
+        "go": f"結論：可參考策略 {s}（{names[s]}）的本月清單",
+        "watch": f"結論：策略 {s} 有優勢但未達 6 成，建議只觀察",
+        "no": "結論：目前沒有策略穩定勝過 0050，不建議依清單買進",
+    }[v["level"]]
+    out = f"<div class='verdict {v['level']}'><div class='t'>{title}</div>{stats}</div>"
+
+    live = data.get("live") or {}
+    picks = (live.get("strategies") or {}).get(s)
+    if not picks:
+        return out + "<p class='note'>本月清單尚未產生（資料回補中或還沒到決策日）。</p>"
+    label = {"go": "本月清單", "watch": "本月清單（僅供觀察）", "no": f"表現最好的策略 {s} 本月清單（僅供觀察，不建議買進）"}[v["level"]]
+    entry = f"{live['entry']} 收盤買進" if live.get("entry") else "下一個交易日收盤買進"
+    out += (f"<h2 style='margin-top:4px'>{label}</h2>"
+            f"<p class='sub'>每檔資金相同，{entry}，約 {_next_exit_hint(str(live['decision']))} 收盤賣出並換成下個月清單。"
+            f"資料至 {live['asof']}，同期 {bench} {_pct(live.get('bench_ret'), 1, True)}。</p>"
+            + _picks_table(picks, live.get("entry") is not None, live.get("bench_ret"), bench))
+    return out
 
 
 def render(data: dict) -> str:
@@ -213,18 +312,7 @@ def render(data: dict) -> str:
     upd = data.get("update") or {}
     best = max((s for s in com if com[s]), key=lambda s: com[s]["pick_hit"], default=None)
 
-    # 頂部 KPI
-    if best:
-        b = com[best]
-        reach = b["pick_hit"] is not None and b["pick_hit"] >= data["config"]["target"]
-        kpi = f"""<div class="kpis">
-<div class="kpi"><div class="v {'ok' if reach else ''}">{_pct(b['pick_hit'])}</div><div class="l">最佳選股勝率（{best}）</div></div>
-<div class="kpi"><div class="v">{_pct(b['baseline_hit'])}</div><div class="l">隨機選股基準</div></div>
-<div class="kpi"><div class="v">{_pct(b['month_win'])}</div><div class="l">月勝率（組合贏 {data['config']['bench']}）</div></div></div>
-<p class="sub" style="margin:10px 0 0">目標：選中個股跑贏 {data['config']['bench']} 的比例 ≥ 60%。
-目前{'<span class="ok">已達標</span>' if reach else '尚未達標'}。共同比較期間 {b['start']}～{b['end']}（{b['months']} 個月）。</p>"""
-    else:
-        kpi = "<p>歷史資料回補中，回測結果尚未產生。</p>"
+    kpi = _verdict_html(data)
 
     # 策略比較表
     def row(s, sm):
@@ -258,7 +346,7 @@ def render(data: dict) -> str:
         tabs = "".join(f"<button data-key='{s}' aria-pressed='{str(i == 0).lower()}'>{s} {names[s]}</button>"
                        for i, s in enumerate(live["strategies"]))
         panes = "".join(f"<div data-pane='live' data-key='{s}' {'hidden' if i else ''}>"
-                        f"{_picks_table(pk, live.get('entry') is not None, live.get('bench_ret'))}</div>"
+                        f"{_picks_table(pk, live.get('entry') is not None, live.get('bench_ret'), data['config']['bench'])}</div>"
                         for i, (s, pk) in enumerate(live["strategies"].items()))
         entry_txt = f"{live['entry']} 收盤進場" if live.get("entry") else "下一個交易日收盤進場"
         live_html = (f"<p class='sub'>{live['month']} 月決策日 {live['decision']}，{entry_txt}，持有到下月 11 日後換股。"
@@ -272,9 +360,12 @@ def render(data: dict) -> str:
     if lm:
         tabs = "".join(f"<button data-key='{s}' aria-pressed='{str(i == 0).lower()}'>{s}</button>" for i, s in enumerate(lm))
         panes = "".join(
-            f"<div data-pane='last' data-key='{s}' {'hidden' if i else ''}><p class='sub'>{r['month']}：組合 {_pct(r['port_ret'], 1, True)}，"
-            f"{data['config']['bench']} {_pct(r['bench_ret'], 1, True)}，勝率 {_pct(r['hit_rate'], 0)}</p>"
-            f"{_picks_table(r['picks'], True, r['bench_ret'])}</div>" for i, (s, r) in enumerate(lm.items()))
+            f"<div data-pane='last' data-key='{s}' {'hidden' if i else ''}><p class='sub'>{r['month']}：10 檔平均 "
+            f"<span class='{_sign_cls(r['port_ret'])}'>{_pct(r['port_ret'], 1, True)}</span>，"
+            f"{data['config']['bench']} <span class='{_sign_cls(r['bench_ret'])}'>{_pct(r['bench_ret'], 1, True)}</span>，"
+            f"{'贏' if r['port_ret'] > r['bench_ret'] else '輸'} {data['config']['bench']}；"
+            f"{round(r['hit_rate'] * len(r['picks']))}/{len(r['picks'])} 檔贏 {data['config']['bench']}</p>"
+            f"{_picks_table(r['picks'], True, r['bench_ret'], data['config']['bench'])}</div>" for i, (s, r) in enumerate(lm.items()))
         last_html = f"<div class='tabs' data-group='last'>{tabs}</div>{panes}"
     else:
         last_html = "<p class='note'>尚無資料。</p>"
@@ -291,9 +382,9 @@ def render(data: dict) -> str:
 <title>台股 20 日預測回測</title><style>{CSS}</style></head>
 <body><div class="viz-root"><main>
 <h1>台股 20 日選股回測</h1>
-<div class="sub">資料至 {data['data_until']}・更新於 {data['generated']}・每月選 {data['config']['top_n']} 檔・來回成本 {_pct(data['config']['cost'], 3)}</div>
+<div class="sub">資料至 {data['data_until']}・更新於 {data['generated']}・每月選 {data['config']['top_n']} 檔・來回成本 {_pct(data['config']['cost'], 3)}・<span class="up">紅＝漲</span> <span class="down">綠＝跌</span></div>
 
-<section class="card"><h2>是否達到 6 成</h2>{kpi}</section>
+<section class="card">{kpi}</section>
 
 <section class="card"><h2>策略比較（共同期間）</h2><div class="scroll"><table>{head}{tbl_com}</table></div>
 <p class="note">選股勝率＝選中個股（扣成本）跑贏 {data['config']['bench']} 的比例。t 值 &gt; 2 代表勝率明顯高於隨機選股，不太可能是運氣。</p>
@@ -305,7 +396,7 @@ def render(data: dict) -> str:
 <section class="card"><h2>累積淨值</h2><div class="legend">{legend}<span>虛線＝{data['config']['bench']}</span></div>
 <div class="chart" id="c-nav"></div></section>
 
-<section class="card"><h2>本月持股</h2>{live_html}</section>
+<section class="card"><h2>三個策略的本月清單</h2>{live_html}</section>
 <section class="card"><h2>上個完整月份結果</h2>{last_html}</section>
 
 <section class="card"><h2>逐年選股勝率</h2><div class="scroll"><table>{ytbl}</table></div></section>

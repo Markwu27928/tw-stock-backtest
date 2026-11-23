@@ -148,7 +148,7 @@ def test_backtest_finds_planted_signal(world_env):
     data = report.build(p, bt, {"days_done": 10, "days_total": 10, "contiguous_until": "2018-12-31", "log": ["ok"]})
     report.write(data)
     html = (config.DOCS_DIR / "index.html").read_text("utf-8")
-    assert "策略比較" in html and "本月持股" in html and "NaN" not in html
+    assert "策略比較" in html and "結論" in html and "本月清單" in html and "NaN" not in html
 
 
 def test_no_lookahead(world_env, tmp_path):
@@ -204,6 +204,25 @@ def test_pure_noise_market_shows_no_edge(tmp_path, monkeypatch):
         print(s, round(sm["pick_hit"], 3), round(sm["baseline_hit"], 3), round(sm["t_stat"], 2))
         assert abs(sm["pick_hit"] - sm["baseline_hit"]) < 0.08
         assert sm["pick_hit"] < config.TARGET_HIT
+
+
+def test_verdict_levels():
+    from src.report import verdict, _picks_table
+    def data(**kw):
+        sm = {"months": 60, "pick_hit": 0.55, "baseline_hit": 0.46, "t_stat": 1.0, "cagr": 0.05, "bench_cagr": 0.08}
+        sm.update(kw)
+        return {"config": {"target": 0.6, "bench": "0050"}, "summary_common": {"A": sm, "B": {}, "C": {}}}
+    assert verdict(data(pick_hit=0.62, t_stat=2.5, cagr=0.12))["level"] == "go"
+    assert verdict(data(pick_hit=0.62, t_stat=1.5, cagr=0.12))["level"] == "no"      # 不顯著不能說達標
+    assert verdict(data(pick_hit=0.62, t_stat=2.5, cagr=0.03))["level"] == "watch" or \
+        verdict(data(pick_hit=0.62, t_stat=2.5, cagr=0.03))["level"] == "no"         # 年化輸 0050 不能給 go
+    assert verdict(data(pick_hit=0.56, t_stat=2.2, cagr=0.10))["level"] == "watch"
+    assert verdict(data(months=12))["level"] == "wait"
+    # 顏色依正負（紅漲綠跌），勝負另外用文字
+    html = _picks_table([{"code": "1101", "name": "x", "ret": -0.05}, {"code": "1102", "name": "y", "ret": 0.03}],
+                        True, -0.10)
+    assert "class='down'>-5.0%" in html and "class='up'>+3.0%" in html
+    assert html.count("贏 ") == 2
 
 
 def test_empty_finmind_file_keeps_revenue_numeric(world_env, tmp_path):
