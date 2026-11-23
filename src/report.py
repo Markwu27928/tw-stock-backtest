@@ -14,6 +14,7 @@ from . import config
 from .backtest import STRATEGIES, by_year, common_period, summarize
 
 COLORS = {"A": "var(--series-1)", "B": "var(--series-2)", "C": "var(--series-3)"}
+RECENT_MONTHS = 48
 
 
 def _pct(x, digits=1, sign=False):
@@ -82,6 +83,8 @@ def build(panel, bt: dict, update_info: dict) -> dict:
     full = {s: summarize(rows) for s, rows in res.items()}
     com_rows = common_period(res)
     com = {s: summarize(rows) for s, rows in com_rows.items()}
+    # 近 4 年：共同期間最後 48 個月。全期間平均可能被早期表現撐起來，要分開看
+    recent = {s: summarize(rows[-RECENT_MONTHS:]) for s, rows in com_rows.items()}
     years = {s: by_year(rows) for s, rows in com_rows.items()}
     # 圖表資料（共同期間）
     ref = next((rows for rows in com_rows.values() if rows), [])
@@ -99,7 +102,7 @@ def build(panel, bt: dict, update_info: dict) -> dict:
         "update": update_info,
         "config": {"top_n": config.TOP_N, "cost": config.ROUND_TRIP_COST, "bench": config.BENCH,
                    "target": config.TARGET_HIT, "min_value": config.MIN_VALUE_20, "min_price": config.MIN_PRICE},
-        "summary_full": full, "summary_common": com, "years": years, "chart": chart,
+        "summary_full": full, "summary_common": com, "summary_recent": recent, "years": years, "chart": chart,
         "live": live_table(panel, bt["live"]), "last_month": last_month,
     })
 
@@ -302,6 +305,12 @@ def _verdict_html(data: dict) -> str:
     if ew is not None and sm.get("cagr") is not None and sm["cagr"] <= ew:
         out += (f"<p class='sub'>⚠️ 年化報酬沒有贏過「全部合格股票等權重」，"
                 f"贏 {bench} 的部分可能只是等權重、偏中小型股的效果，不是選股能力。</p>")
+    rc = (data.get("summary_recent") or {}).get(s) or {}
+    if rc.get("cagr") is not None and rc.get("bench_cagr") is not None:
+        lost = rc["cagr"] <= rc["bench_cagr"]
+        out += (f"<p class='sub'>{'⚠️ ' if lost else ''}近 4 年（{rc['start']}～{rc['end']}）年化 {_pct(rc['cagr'], 1, True)}，"
+                f"同期 {bench} {_pct(rc['bench_cagr'], 1, True)}"
+                f"{'，沒有贏過 ' + bench + '，全期間的優勢主要來自較早的年份' if lost else ''}。</p>")
     rb = (data.get("robustness") or {}).get("verdict", {}).get(s)
     if rb:
         out += f"<p class='sub'>穩健度：{ROBUST_TEXT[rb]}（見下方「穩健度檢查」）</p>"
@@ -410,6 +419,9 @@ def render(data: dict) -> str:
     head = ("<tr><th>策略</th><th>選股勝率</th><th>近12月</th><th>月勝率</th><th>年化</th><th>等權重年化</th>"
             f"<th>{data['config']['bench']}年化</th><th>最大回撤</th><th>t值</th></tr>")
     tbl_com = "".join(row(s, com.get(s)) for s in names)
+    rec = data.get("summary_recent") or {}
+    tbl_rec = "".join(row(s, rec.get(s)) for s in names)
+    rec_any = next((v for v in rec.values() if v), {})
     tbl_full = "".join(row(s, full.get(s)) for s in names)
 
     # 逐年
@@ -472,6 +484,9 @@ def render(data: dict) -> str:
 <section class="card"><h2>策略比較（共同期間）</h2><div class="scroll"><table>{head}{tbl_com}</table></div>
 <p class="note">選股勝率＝選中個股（扣成本）跑贏 {data['config']['bench']} 的比例。t 值 &gt; 2 代表勝率明顯高於隨機選股，不太可能是運氣。
 等權重年化＝每月平均持有全部合格股票（同樣扣成本），用來檢查策略是不是只靠等權重、偏中小型股贏 {data['config']['bench']}。</p>
+<h2 style="margin-top:14px">近 4 年（{rec_any.get('start', '—')}～{rec_any.get('end', '—')}）</h2>
+<div class="scroll"><table>{head}{tbl_rec}</table></div>
+<p class="note">全期間的平均可能被早期表現撐起來；這張表只看最後 {RECENT_MONTHS} 個月，確認優勢是否還在。</p>
 <details><summary>各策略完整期間</summary><div class="scroll"><table>{head}{tbl_full}</table></div></details></section>
 
 <section class="card"><h2>近 12 個月選股勝率</h2><div class="legend">{legend}<span>虛線＝全市場平均</span></div>

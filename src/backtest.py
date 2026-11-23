@@ -19,7 +19,7 @@ from .features import FEATURES, Panel, bench_return, decision_dates, features_at
 warnings.filterwarnings("ignore", category=UserWarning)
 
 STRATEGIES = {
-    "A": "月營收年增率單因子",
+    "A": "月營收年增率（排除 >100%）",
     "B": "多因子綜合分數",
     "C": "LightGBM 機器學習",
 }
@@ -30,7 +30,8 @@ def _rank(s: pd.Series) -> pd.Series:
 
 
 def score_a(f: pd.DataFrame) -> pd.Series:
-    return f["rev_yoy"]
+    yoy = f["rev_yoy"].astype(float)
+    return yoy.where(yoy <= config.A_MAX_REV_YOY)
 
 
 def score_b(f: pd.DataFrame) -> pd.Series:

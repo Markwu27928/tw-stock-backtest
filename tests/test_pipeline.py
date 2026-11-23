@@ -347,3 +347,17 @@ def test_report_shows_new_sections(world_env):
     data["quality"] = quality.check(p, {}, today=date(2019, 1, 2))
     html = report.render(data)
     assert "穩健度檢查" in html and "實盤追蹤" in html and "等權重年化" in html and "NaN" not in html
+
+
+def test_strategy_a_excludes_extreme_yoy():
+    f = pd.DataFrame({"rev_yoy": [0.5, 0.99, 1.0, 1.01, 4.0, np.nan]}, index=list("abcdef"))
+    s = backtest.score_a(f)
+    assert s.dropna().index.tolist() == ["a", "b", "c"]
+
+
+def test_report_shows_recent_period(world_env):
+    p = build_panel()
+    bt = backtest.run_backtest(p)
+    data = report.build(p, bt, {"days_done": 10, "days_total": 10, "contiguous_until": "2018-12-31", "log": []})
+    assert all(len(backtest.common_period(bt["results"])[s]) >= data["summary_recent"][s]["months"] for s in "ABC")
+    assert "近 4 年" in report.render(data)
