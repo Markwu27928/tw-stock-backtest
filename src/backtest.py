@@ -90,10 +90,11 @@ def run_backtest(p: Panel) -> dict:
         scores = {"A": score_a(f), "B": score_b(f)}
         n_train_months = len({r["month"] for r in train})
         if n_train_months >= config.MIN_TRAIN_MONTHS:
-            tr = pd.concat([r["df"] for r in train])
+            # 空月份的 DataFrame 欄位是 object，concat 後會污染整欄，LightGBM 會報 dtype 錯誤
+            tr = pd.concat([r["df"] for r in train if len(r["df"])])
             model = _lgbm()
-            model.fit(tr[FEATURES], tr["label"])
-            scores["C"] = pd.Series(model.predict(f[FEATURES]), index=f.index)
+            model.fit(tr[FEATURES].astype(float), tr["label"].astype(float))
+            scores["C"] = pd.Series(model.predict(f[FEATURES].astype(float)), index=f.index)
 
         if done:
             lab = f[FEATURES].copy()
