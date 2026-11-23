@@ -9,7 +9,7 @@ import time
 
 import pandas as pd
 
-from . import backtest, config, report, update_data
+from . import backtest, config, live_log, quality, report, robustness, update_data
 from .features import build_panel
 
 
@@ -40,6 +40,7 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--max-minutes", type=float, default=45, help="抓資料時間上限（分鐘）")
     ap.add_argument("--skip-fetch", action="store_true")
+    ap.add_argument("--no-liquidity", action="store_true", help="略過流動性門檻的穩健度檢查（要重跑兩次回測）")
     a = ap.parse_args()
 
     if a.skip_fetch:
@@ -60,13 +61,33 @@ def main() -> int:
             # 歷史還沒補完：只保留連續完整區間內已結束的月份
             for s in bt["results"]:
                 bt["results"][s] = [r for r in bt["results"][s] if r["exit"] <= until]
+            bt["months"] = [m for m in bt["months"] if m["exit"] <= until]
             bt["live"] = None   # 中間有缺口時，動能等特徵不可靠，先不顯示本月持股
         data = report.build(panel, bt, info)
+
+        # 穩健度檢查（成本、檔數、流動性門檻）
+        rb = robustness.run(panel, bt, with_liquidity=not a.no_liquidity)
+        data["robustness"] = report._clean(rb)
+
+        # 實盤追蹤：凍結本月名單，計算歷次凍結名單的報酬
+        log = live_log.load()
+        if live_log.freeze(log, bt["live"]):
+            live_log.save(log)
+        data["live_track"] = report._clean(live_log.evaluate(log, panel, bt["schedule"]))
+
+        # 資料品質
+        findings = quality.check(panel, info)
+        data["quality"] = findings
+        for q in findings:
+            if q["level"] in ("error", "warning"):
+                print(f"::warning title=資料品質::{q['msg']}")
+
         report.write(data)
         print(f"回測完成，用時 {time.time() - t0:.0f} 秒")
         for s, sm in data["summary_common"].items():
             if sm:
-                print(s, f"選股勝率 {sm['pick_hit']:.3f} 基準 {sm['baseline_hit']:.3f} 月勝率 {sm['month_win']:.3f}")
+                print(s, f"選股勝率 {sm['pick_hit']:.3f} 基準 {sm['baseline_hit']:.3f} 月勝率 {sm['month_win']:.3f}",
+                      f"年化 {sm['cagr']:.3f} 等權重 {sm['ew_cagr']:.3f} 0050 {sm['bench_cagr']:.3f} 穩健度 {rb['verdict'][s]}")
     except RuntimeError as e:
         print("略過回測：", e)
     return 0

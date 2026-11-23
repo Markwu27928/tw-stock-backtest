@@ -204,6 +204,11 @@ def test_pure_noise_market_shows_no_edge(tmp_path, monkeypatch):
         print(s, round(sm["pick_hit"], 3), round(sm["baseline_hit"], 3), round(sm["t_stat"], 2))
         assert abs(sm["pick_hit"] - sm["baseline_hit"]) < 0.08
         assert sm["pick_hit"] < config.TARGET_HIT
+    # 沒有訊號的市場，穩健度檢查不應判定任何策略「穩健」
+    from src import robustness
+    p = build_panel()
+    rb = robustness.run(p, backtest.run_backtest(p), with_liquidity=False)
+    assert all(v != "robust" for v in rb["verdict"].values()), rb["verdict"]
 
 
 def test_verdict_levels():
@@ -266,3 +271,79 @@ def test_report_status_warns_when_no_progress(capsys, tmp_path, monkeypatch):
 def test_finmind_hint_messages():
     assert "額度" in update_data.finmind_hint(sources.FetchError("x: HTTP 402"))
     assert "token" in update_data.finmind_hint(sources.FetchError("x: HTTP 401"))
+
+
+# ---------------------------------------------------------------- 穩健度、等權重基準、實盤追蹤、資料品質
+def test_equal_weight_baseline(world_env):
+    bt = backtest.run_backtest(build_panel())
+    rows = bt["results"]["A"]
+    assert rows and all("ew_ret" in r for r in rows)
+    sm = backtest.summarize(rows)
+    assert np.isfinite(sm["ew_cagr"]) and 0 <= sm["ew_month_win"] <= 1
+
+
+def test_robustness_variants(world_env):
+    from src import robustness
+    p = build_panel()
+    bt = backtest.run_backtest(p)
+    rb = robustness.run(p, bt, with_liquidity=False)
+    for s, rows in rb["variants"].items():
+        names = [r["name"] for r in rows]
+        assert names[:3] == ["成本 ×1", "成本 ×1.5", "成本 ×2"] and "選 5 檔" in names and "選 20 檔" in names
+        cagr = [r["cagr"] for r in rows[:3]]
+        assert cagr[0] > cagr[1] > cagr[2]          # 成本越高報酬越低
+        assert rb["verdict"][s] in ("robust", "fragile", "none")
+    # 合成市場裡 A 有植入訊號，成本 ×1 應贏隨機選股
+    assert rb["variants"]["A"][0]["beats_random"]
+
+
+def test_liquidity_variant_restores_config(world_env):
+    from src import robustness
+    p = build_panel()
+    before = config.MIN_VALUE_20
+    out = robustness.liquidity(p, mults=(2.0,))
+    assert config.MIN_VALUE_20 == before
+    assert out["A"] and out["A"][0]["name"] == "流動性門檻 ×2"
+
+
+def test_live_log_freeze_is_permanent(world_env):
+    from src import live_log
+    p = build_panel()
+    bt = backtest.run_backtest(p)
+    last = bt["results"]["A"][-1]
+    fake_live = {"month": last["month"], "decision": last["decision"], "entry": last["entry"],
+                 "scores": {s: pd.Series({pk["code"]: pk["score"] for pk in bt["results"][s][-1]["picks"]})
+                            for s in bt["results"]}}
+    log = {}
+    assert live_log.freeze(log, fake_live, today="2018-12-01")
+    frozen = list(log[last["month"]]["picks"]["A"])
+    # 之後分數改變，也不能改寫已凍結的名單
+    changed = dict(fake_live, scores={s: -sc for s, sc in fake_live["scores"].items()})
+    assert not live_log.freeze(log, changed)
+    assert log[last["month"]]["picks"]["A"] == frozen
+    ev = live_log.evaluate(log, p, bt["schedule"])
+    assert ev[0]["status"] == "closed"
+    # 凍結名單的報酬要和回測同月份一致（同樣的進出場日與成本）
+    assert abs(ev[0]["strategies"]["A"]["port_ret"] - last["port_ret"]) < 1e-9
+
+
+def test_quality_checks(world_env, tmp_path):
+    from src import quality
+    p = build_panel()
+    q = quality.check(p, {"days_done": 90, "days_total": 100, "contiguous_until": "2018-06-01"},
+                      today=date(2019, 3, 1))
+    msgs = " ".join(x["msg"] for x in q)
+    assert "尚未補完" in msgs and "沒有更新" in msgs
+    assert not any(x["level"] == "error" for x in q)
+
+
+def test_report_shows_new_sections(world_env):
+    from src import live_log, quality, robustness
+    p = build_panel()
+    bt = backtest.run_backtest(p)
+    data = report.build(p, bt, {"days_done": 10, "days_total": 10, "contiguous_until": "2018-12-31", "log": ["ok"]})
+    data["robustness"] = report._clean(robustness.run(p, bt, with_liquidity=False))
+    data["live_track"] = report._clean(live_log.evaluate({}, p, bt["schedule"]))
+    data["quality"] = quality.check(p, {}, today=date(2019, 1, 2))
+    html = report.render(data)
+    assert "穩健度檢查" in html and "實盤追蹤" in html and "等權重年化" in html and "NaN" not in html

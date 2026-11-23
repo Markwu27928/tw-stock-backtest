@@ -74,6 +74,7 @@ def run_backtest(p: Panel) -> dict:
     cost = config.ROUND_TRIP_COST
     hist_rows = []          # LightGBM 訓練資料：features + label + exit
     results = {s: [] for s in STRATEGIES}
+    months = []             # 壓力測試用：每月毛報酬、基準、各策略分數
     live = None
 
     for m in sched:
@@ -110,6 +111,8 @@ def run_backtest(p: Panel) -> dict:
 
         net = fwd - cost
         universe_hit = float((net > bench).mean())
+        ew_ret = float(net.mean())      # 全部合格股票等權重持有（同樣扣成本）
+        months.append({"month": m["month"], "exit": m["exit"], "fwd": fwd, "bench": bench, "scores": scores})
         for s, sc in scores.items():
             top = sc.dropna().sort_values(ascending=False).head(config.TOP_N)
             r = net.reindex(top.index)
@@ -119,9 +122,9 @@ def run_backtest(p: Panel) -> dict:
                            "ret": float(r[c])} for c in top.index],
                 "port_ret": float(r.mean()), "bench_ret": bench,
                 "hit_rate": float((r > bench).mean()), "universe_hit": universe_hit,
-                "n_universe": int(len(f)),
+                "ew_ret": ew_ret, "n_universe": int(len(f)),
             })
-    return {"results": results, "live": live, "schedule": sched}
+    return {"results": results, "live": live, "schedule": sched, "months": months}
 
 
 # ---------------------------------------------------------------- 績效指標
@@ -136,6 +139,10 @@ def summarize(rows: list[dict]) -> dict:
     years = len(df) / 12
     diff = df["hit_rate"] - df["universe_hit"]
     t = float(diff.mean() / (diff.std(ddof=1) / np.sqrt(len(diff)))) if len(diff) > 2 and diff.std() > 0 else np.nan
+    ew = df["ew_ret"] if "ew_ret" in df else pd.Series(np.nan, index=df.index)
+    ex = df["port_ret"] - ew
+    t_ew = float(ex.mean() / (ex.std(ddof=1) / np.sqrt(len(ex)))) if len(ex) > 2 and ex.std() > 0 else np.nan
+    ewnav = (1 + ew).cumprod()
     last12 = rows[-12:]
     l12_picks = sum(len(r["picks"]) for r in last12)
     l12_hits = sum(sum(pk["ret"] > r["bench_ret"] for pk in r["picks"]) for r in last12)
@@ -150,6 +157,10 @@ def summarize(rows: list[dict]) -> dict:
         "bench_cagr": float(bnav.iloc[-1] ** (1 / years) - 1) if years > 0 else np.nan,
         "mdd": float((nav / nav.cummax() - 1).min()),
         "t_stat": t,
+        # 等權重基準：每月平均持有全部合格股票。策略若贏不了它，優勢可能只是「等權重、偏中小型股」
+        "ew_cagr": float(ewnav.iloc[-1] ** (1 / years) - 1) if years > 0 and ew.notna().all() else np.nan,
+        "ew_month_win": float((ex > 0).mean()) if ew.notna().all() else np.nan,
+        "t_ew": t_ew,
         "last12_hit": l12_hits / l12_picks if l12_picks else np.nan,
     }
 

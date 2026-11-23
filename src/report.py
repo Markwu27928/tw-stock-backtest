@@ -231,6 +231,11 @@ def _picks_table(picks, show_ret=True, bench=None, bench_name="0050"):
 
 
 MIN_MONTHS_FOR_VERDICT = 24
+ROBUST_TEXT = {
+    "robust": "成本加倍、改變檔數與流動性門檻後，仍同時贏隨機選股、等權重與 0050",
+    "fragile": "部分變化下優勢消失，結果偏脆弱",
+    "none": "多數變化下都贏不了隨機選股、等權重或 0050",
+}
 
 
 def verdict(data: dict) -> dict:
@@ -284,14 +289,23 @@ def _verdict_html(data: dict) -> str:
                 f"<p class='sub'>回測需要至少 {MIN_MONTHS_FOR_VERDICT} 個月的結果才會判斷。</p></div>")
     s, sm = v["strategy"], v["sm"]
     stats = (f"<ul><li>選股勝率 {_pct(sm['pick_hit'])}（目標 60%，隨機選股 {_pct(sm['baseline_hit'])}）</li>"
-             f"<li>年化報酬 {_pct(sm['cagr'], 1, True)}，同期 {bench} {_pct(sm['bench_cagr'], 1, True)}</li>"
+             f"<li>年化報酬 {_pct(sm['cagr'], 1, True)}，同期 {bench} {_pct(sm['bench_cagr'], 1, True)}，"
+             f"全部合格股票等權重 {_pct(sm.get('ew_cagr'), 1, True)}</li>"
              f"<li>t 值 {_num(sm['t_stat'])}（≥ 2 才算不是運氣）・回測 {sm['months']} 個月</li></ul>")
     title = {
         "go": f"結論：可參考策略 {s}（{names[s]}）的本月清單",
         "watch": f"結論：策略 {s} 有優勢但未達 6 成，建議只觀察",
         "no": "結論：目前沒有策略穩定勝過 0050，不建議依清單買進",
     }[v["level"]]
-    out = f"<div class='verdict {v['level']}'><div class='t'>{title}</div>{stats}</div>"
+    out = f"<div class='verdict {v['level']}'><div class='t'>{title}</div>{stats}"
+    ew = sm.get("ew_cagr")
+    if ew is not None and sm.get("cagr") is not None and sm["cagr"] <= ew:
+        out += (f"<p class='sub'>⚠️ 年化報酬沒有贏過「全部合格股票等權重」，"
+                f"贏 {bench} 的部分可能只是等權重、偏中小型股的效果，不是選股能力。</p>")
+    rb = (data.get("robustness") or {}).get("verdict", {}).get(s)
+    if rb:
+        out += f"<p class='sub'>穩健度：{ROBUST_TEXT[rb]}（見下方「穩健度檢查」）</p>"
+    out += "</div>"
 
     live = data.get("live") or {}
     picks = (live.get("strategies") or {}).get(s)
@@ -306,6 +320,75 @@ def _verdict_html(data: dict) -> str:
     return out
 
 
+def _robust_html(data: dict) -> str:
+    rb = data.get("robustness") or {}
+    var = rb.get("variants") or {}
+    if not var:
+        return ""
+    names = STRATEGIES
+    tabs = "".join(f"<button data-key='{s}' aria-pressed='{str(i == 0).lower()}'>{s}</button>" for i, s in enumerate(var))
+    panes = []
+    for i, (s, rows) in enumerate(var.items()):
+        trs = []
+        for r in rows:
+            if not r.get("months"):
+                continue
+            ok = r.get("beats_random") and r.get("beats_ew") and r.get("beats_bench")
+            trs.append(f"<tr><td>{html.escape(r['name'])}</td><td>{_pct(r['pick_hit'])}</td><td>{_pct(r['baseline_hit'])}</td>"
+                       f"<td>{_pct(r['cagr'], 1, True)}</td><td>{_pct(r['ew_cagr'], 1, True)}</td>"
+                       f"<td>{_pct(r.get('bench_cagr'), 1, True)}</td>"
+                       f"<td class='{'win' if ok else 'lose'}'>{'✓' if ok else '✗'}</td></tr>")
+        v = (rb.get("verdict") or {}).get(s, "none")
+        fl = (rb.get("failed") or {}).get(s) or []
+        fl_txt = f"未通過：{'、'.join(html.escape(x) for x in fl)}" if fl else "全部通過"
+        panes.append(f"<div data-pane='robust' data-key='{s}' {'hidden' if i else ''}>"
+                     f"<p class='sub'><b>{s} {names[s]}</b>：{ROBUST_TEXT[v]}（{fl_txt}）</p>"
+                     "<div class='scroll'><table><tr><th>變化</th><th>選股勝率</th><th>隨機基準</th><th>年化</th>"
+                     f"<th>等權重</th><th>{data['config']['bench']}</th><th>三者都贏</th></tr>{''.join(trs)}</table></div></div>")
+    return (f"<section class='card'><h2>穩健度檢查（共同期間）</h2>"
+            "<p class='sub'>好的策略在不同成本、檔數、流動性門檻下都應該站得住，而不是只在預設值才有效。"
+            "這些變化在看結果前就固定，不依結果挑參數。</p>"
+            f"<div class='tabs' data-group='robust'>{tabs}</div>{''.join(panes)}"
+            "<p class='note'>成本 ×1.5、×2 用來模擬滑價與較差的成交價（回測以收盤價成交）。</p></section>")
+
+
+def _live_track_html(data: dict) -> str:
+    track = data.get("live_track")
+    if track is None:
+        return ""
+    if not track:
+        body = "<p class='note'>還沒有凍結的名單。下個決策日起每月自動記錄。</p>"
+    else:
+        rows = []
+        for t in reversed(track):
+            st = {"closed": "已結束", "holding": "持有中", "waiting": "等待進場"}[t["status"]]
+            cells = "".join(
+                f"<td class='{_sign_cls((t['strategies'].get(s) or {}).get('port_ret'))}'>"
+                f"{_pct((t['strategies'].get(s) or {}).get('port_ret'), 1, True)}</td>" for s in STRATEGIES)
+            late = " *" if t.get("late") else ""
+            rows.append(f"<tr><td>{t['month']}{late}</td><td>{st}</td>{cells}"
+                        f"<td class='{_sign_cls(t.get('bench_ret'))}'>{_pct(t.get('bench_ret'), 1, True)}</td></tr>")
+        head = ("<tr><th>月份</th><th>狀態</th>" + "".join(f"<th>{s}</th>" for s in STRATEGIES)
+                + f"<th>{data['config']['bench']}</th></tr>")
+        body = (f"<div class='scroll'><table>{head}{''.join(rows)}</table></div>"
+                "<p class='note'>* 該月是在決策日之後才開始記錄，不算事前預測。報酬已扣成本。</p>")
+    return ("<section class='card'><h2>實盤追蹤（樣本外）</h2>"
+            "<p class='sub'>每月決策後把三個策略的名單凍結存檔，之後只算報酬、不再更動。"
+            "回測規則是看過歷史才設計的，這裡的真實月份才是真正的驗證。</p>"
+            f"{body}</section>")
+
+
+def _quality_html(data: dict) -> str:
+    q = data.get("quality")
+    if q is None:
+        return ""
+    if not q:
+        return "<p class='sub'>✓ 資料品質檢查沒有發現問題。</p>"
+    icon = {"error": "❌", "warning": "⚠️", "info": "ℹ️"}
+    items = "".join(f"<li>{icon.get(x['level'], '')} {html.escape(x['msg'])}</li>" for x in q)
+    return f"<ul class='sub' style='padding-left:18px'>{items}</ul>"
+
+
 def render(data: dict) -> str:
     names = STRATEGIES
     com, full = data["summary_common"], data["summary_full"]
@@ -317,14 +400,14 @@ def render(data: dict) -> str:
     # 策略比較表
     def row(s, sm):
         if not sm:
-            return f"<tr><td><span class='sw' style='background:{COLORS[s]}'></span>{s} {names[s]}</td><td colspan=7 class='no'>資料不足</td></tr>"
+            return f"<tr><td><span class='sw' style='background:{COLORS[s]}'></span>{s} {names[s]}</td><td colspan=8 class='no'>資料不足</td></tr>"
         ok = sm["pick_hit"] >= data["config"]["target"]
         return (f"<tr><td><span class='sw' style='background:{COLORS[s]}'></span>{s} {names[s]}</td>"
                 f"<td class='{'ok' if ok else ''}'>{_pct(sm['pick_hit'])}{' ✓' if ok else ''}</td>"
                 f"<td>{_pct(sm['last12_hit'])}</td><td>{_pct(sm['month_win'])}</td>"
-                f"<td>{_pct(sm['cagr'], 1, True)}</td><td>{_pct(sm['bench_cagr'], 1, True)}</td>"
+                f"<td>{_pct(sm['cagr'], 1, True)}</td><td>{_pct(sm.get('ew_cagr'), 1, True)}</td><td>{_pct(sm['bench_cagr'], 1, True)}</td>"
                 f"<td>{_pct(sm['mdd'])}</td><td>{_num(sm['t_stat'])}</td></tr>")
-    head = ("<tr><th>策略</th><th>選股勝率</th><th>近12月</th><th>月勝率</th><th>年化</th>"
+    head = ("<tr><th>策略</th><th>選股勝率</th><th>近12月</th><th>月勝率</th><th>年化</th><th>等權重年化</th>"
             f"<th>{data['config']['bench']}年化</th><th>最大回撤</th><th>t值</th></tr>")
     tbl_com = "".join(row(s, com.get(s)) for s in names)
     tbl_full = "".join(row(s, full.get(s)) for s in names)
@@ -387,7 +470,8 @@ def render(data: dict) -> str:
 <section class="card">{kpi}</section>
 
 <section class="card"><h2>策略比較（共同期間）</h2><div class="scroll"><table>{head}{tbl_com}</table></div>
-<p class="note">選股勝率＝選中個股（扣成本）跑贏 {data['config']['bench']} 的比例。t 值 &gt; 2 代表勝率明顯高於隨機選股，不太可能是運氣。</p>
+<p class="note">選股勝率＝選中個股（扣成本）跑贏 {data['config']['bench']} 的比例。t 值 &gt; 2 代表勝率明顯高於隨機選股，不太可能是運氣。
+等權重年化＝每月平均持有全部合格股票（同樣扣成本），用來檢查策略是不是只靠等權重、偏中小型股贏 {data['config']['bench']}。</p>
 <details><summary>各策略完整期間</summary><div class="scroll"><table>{head}{tbl_full}</table></div></details></section>
 
 <section class="card"><h2>近 12 個月選股勝率</h2><div class="legend">{legend}<span>虛線＝全市場平均</span></div>
@@ -401,7 +485,9 @@ def render(data: dict) -> str:
 
 <section class="card"><h2>逐年選股勝率</h2><div class="scroll"><table>{ytbl}</table></div></section>
 
-<section class="card"><h2>資料狀態</h2>
+{_robust_html(data)}
+{_live_track_html(data)}
+<section class="card"><h2>資料狀態</h2>{_quality_html(data)}
 <div class="bar"><i style="width:{prog * 100:.1f}%"></i></div>
 <p class="sub">歷史交易日 {done}/{total}（{_pct(prog, 0)}），連續完整至 {upd.get('contiguous_until') or '—'}。最近一次抓取 {upd.get('run_at', '—')}。</p>
 <details><summary>抓取紀錄</summary><ul class="note">{upd_log}</ul></details></section>
