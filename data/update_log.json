@@ -1,15 +1,9 @@
 {
- "run_at": "2026-11-23T10:47+08:00",
+ "run_at": "2026-11-23T15:17+08:00",
  "log": [
-  "錯誤：https://api.finmindtrade.com/api/v4/data: HTTP 402",
-  "錯誤：https://api.finmindtrade.com/api/v4/data: HTTP 402",
-  "錯誤：https://api.finmindtrade.com/api/v4/data: HTTP 402",
-  "錯誤：https://api.finmindtrade.com/api/v4/data: HTTP 402",
-  "錯誤：https://api.finmindtrade.com/api/v4/data: HTTP 402",
-  "連續錯誤過多，本次停止抓取（可能被證交所暫時封鎖）",
-  "每日行情新增 0 天、法人新增 0 天"
+  "每日行情新增 1043 天、法人新增 1042 天"
  ],
- "contiguous_until": "2022-07-07",
- "days_done": 1979,
- "days_total": 3100
+ "contiguous_until": "2026-11-20",
+ "days_done": 3101,
+ "days_total": 3101
 }
