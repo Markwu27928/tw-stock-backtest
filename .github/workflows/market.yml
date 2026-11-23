@@ -1,0 +1,75 @@
+name: 每日盤勢
+
+# 主要由外部排程準時觸發（workflow_dispatch）；GitHub 排程只當備援，晚到時任務會檢查「今天做過了沒」而略過。
+on:
+  workflow_dispatch:
+    inputs:
+      task:
+        description: "preopen（開盤前）/ intraday（09:40）/ close（收盤）/ flows（法人）/ backfill（回補歷史）/ render"
+        required: true
+        default: "render"
+      force:
+        description: "已完成也重做（true/false）"
+        default: "false"
+  schedule:
+    - cron: "25 0 * * 1-5"    # 台北 08:25 開盤前（備援）
+    - cron: "35 0 * * 1-5"    # 台北 08:35 開盤前（備援）
+    - cron: "45 1 * * 1-5"    # 台北 09:45 盤中（備援）
+    - cron: "55 1 * * 1-5"    # 台北 09:55 盤中（備援）
+    - cron: "50 5 * * 1-5"    # 台北 13:50 收盤（備援）
+    - cron: "10 6 * * 1-5"    # 台北 14:10 收盤（備援）
+
+permissions:
+  contents: write
+
+concurrency:
+  group: market-${{ github.event.inputs.task || github.event.schedule }}
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 340
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: 安裝套件
+        run: pip install -q -r requirements.txt
+
+      - name: 決定任務
+        id: t
+        run: |
+          T="${{ github.event.inputs.task }}"
+          case "${{ github.event.schedule }}" in
+            "25 0 * * 1-5"|"35 0 * * 1-5") T=preopen ;;
+            "45 1 * * 1-5"|"55 1 * * 1-5") T=intraday ;;
+            "50 5 * * 1-5"|"10 6 * * 1-5") T=close ;;
+          esac
+          echo "task=$T" >> "$GITHUB_OUTPUT"
+          echo "任務：$T"
+
+      - name: 執行
+        run: |
+          F=""; [ "${{ github.event.inputs.force }}" = "true" ] && F="--force"
+          python -m src.market ${{ steps.t.outputs.task }} $F --minutes 320
+
+      - name: 存檔
+        if: always()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/market docs/today.html
+          git diff --cached --quiet && exit 0
+          git commit -q -m "盤勢 ${{ steps.t.outputs.task }} $(TZ=Asia/Taipei date '+%F %H:%M')"
+          for i in 1 2 3 4; do
+            git pull -q --rebase -X theirs origin main && git push -q && exit 0
+            sleep $((i * 10))
+          done
+          exit 1

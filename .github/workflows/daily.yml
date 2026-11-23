@@ -42,12 +42,21 @@ jobs:
           FINMIND_TOKEN: ${{ secrets.FINMIND_TOKEN }}
           FEE_DISCOUNT: ${{ vars.FEE_DISCOUNT || '1.0' }}
 
+      - name: 三大法人整理（今日盤勢頁）
+        if: success()
+        continue-on-error: true
+        run: python -m src.market flows
+
       - name: 存檔
         if: always()
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add data docs
-          git diff --cached --quiet || git commit -q -m "每日更新 $(TZ=Asia/Taipei date +%F)"
-          git pull --rebase --autostash || true
-          git push
+          git diff --cached --quiet && exit 0
+          git commit -q -m "每日更新 $(TZ=Asia/Taipei date +%F)"
+          for i in 1 2 3 4; do
+            git pull -q --rebase -X theirs origin main && git push -q && exit 0
+            sleep $((i * 10))
+          done
+          exit 1

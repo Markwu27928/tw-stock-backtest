@@ -477,6 +477,7 @@ def render(data: dict) -> str:
 <title>台股 20 日預測回測</title><style>{CSS}</style></head>
 <body><div class="viz-root"><main>
 <h1>台股 20 日選股回測</h1>
+<div class="sub"><a href="today.html">今日盤勢與預測 →</a></div>
 <div class="sub">資料至 {data['data_until']}・更新於 {data['generated']}・每月選 {data['config']['top_n']} 檔・來回成本 {_pct(data['config']['cost'], 3)}・<span class="up">紅＝漲</span> <span class="down">綠＝跌</span></div>
 
 <section class="card">{kpi}</section>
