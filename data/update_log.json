@@ -1,7 +1,6 @@
 {
- "run_at": "2026-11-23T02:53+08:00",
+ "run_at": "2026-11-23T10:47+08:00",
  "log": [
-  "除權息 2026：1446 筆",
   "錯誤：https://api.finmindtrade.com/api/v4/data: HTTP 402",
   "錯誤：https://api.finmindtrade.com/api/v4/data: HTTP 402",
   "錯誤：https://api.finmindtrade.com/api/v4/data: HTTP 402",
