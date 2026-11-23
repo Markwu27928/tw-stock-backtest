@@ -13,6 +13,29 @@ from . import backtest, config, report, update_data
 from .features import build_panel
 
 
+def report_status(info: dict) -> None:
+    """在 GitHub Actions 頁面顯示抓資料結果：有問題時出現黃色警告，不必讀 log。"""
+    done, total = info.get("days_done", 0), info.get("days_total", 0)
+    new = info.get("new_price_days", 0)
+    lines = [
+        "## 抓資料結果",
+        f"- 本次新增行情：**{new} 天**、法人：{info.get('new_t86_days', 0)} 天",
+        f"- 回補進度：**{done} / {total}** 天，連續完整到 {info.get('contiguous_until')}",
+        f"- 提早停止：{'是' if info.get('stopped_early') else '否'}",
+    ]
+    for w in info.get("warnings", []):
+        lines.append(f"- ⚠️ {w}")
+        print(f"::warning title=抓資料::{w}")
+    if total and done < total and new == 0:
+        msg = f"歷史資料尚未補完（{done}/{total}），但本次沒有新增任何一天"
+        lines.append(f"- ⚠️ {msg}")
+        print(f"::warning title=回補沒有進度::{msg}")
+    path = os.getenv("GITHUB_STEP_SUMMARY")
+    if path:
+        with open(path, "a", encoding="utf-8") as fh:
+            fh.write("\n".join(lines) + "\n")
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--max-minutes", type=float, default=45, help="抓資料時間上限（分鐘）")
@@ -25,6 +48,7 @@ def main() -> int:
     else:
         info = update_data.run(a.max_minutes, os.getenv("FINMIND_TOKEN"))
         print(json.dumps(info, ensure_ascii=False, indent=1))
+        report_status(info)
 
     try:
         until = pd.Timestamp(info["contiguous_until"]) if info.get("contiguous_until") else None

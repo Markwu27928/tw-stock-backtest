@@ -204,3 +204,46 @@ def test_pure_noise_market_shows_no_edge(tmp_path, monkeypatch):
         print(s, round(sm["pick_hit"], 3), round(sm["baseline_hit"], 3), round(sm["t_stat"], 2))
         assert abs(sm["pick_hit"] - sm["baseline_hit"]) < 0.08
         assert sm["pick_hit"] < config.TARGET_HIT
+
+
+def test_empty_finmind_file_keeps_revenue_numeric(world_env, tmp_path):
+    """沒有營收的股票（例如存託憑證）FinMind 檔只有表頭，不可把營收欄位變成 object 而讓 LightGBM 當掉。"""
+    backup = tmp_path / "data"
+    shutil.copytree(config.DATA_DIR, backup)
+    try:
+        fm_dir = config.DATA_DIR / "rev_finmind"
+        fm_dir.mkdir(parents=True, exist_ok=True)
+        # 真實情況：有資料的檔和只有表頭的空檔混在一起合併
+        off = store.load_revenue()
+        code = off["code"].iloc[0]
+        sample = off[off["code"] == code][["ym", "code", "rev"]].head(24)
+        sample.to_csv(fm_dir / f"{code}.csv.gz", index=False, compression="gzip")
+        pd.DataFrame(columns=["ym", "code", "rev"]).to_csv(fm_dir / "9103.csv.gz", index=False, compression="gzip")
+        rv = store.load_revenue()
+        assert rv["rev"].dtype.kind == "f" and rv["rev_ly"].dtype.kind == "f"
+        bt = backtest.run_backtest(build_panel())
+        assert len(bt["results"]["C"]) > 0
+    finally:
+        shutil.rmtree(config.DATA_DIR)
+        shutil.copytree(backup, config.DATA_DIR)
+
+
+def test_report_status_warns_when_no_progress(capsys, tmp_path, monkeypatch):
+    from src import run_daily
+    summary = tmp_path / "summary.md"
+    monkeypatch.setenv("GITHUB_STEP_SUMMARY", str(summary))
+    run_daily.report_status({
+        "days_done": 1979, "days_total": 3100, "contiguous_until": "2022-07-07",
+        "new_price_days": 0, "new_t86_days": 0, "stopped_early": False,
+        "warnings": ["月營收逐檔回補暫停：FinMind 本小時額度已用完，下次執行會接續（已完成 10/20 檔）"],
+    })
+    out = capsys.readouterr().out
+    assert "::warning title=回補沒有進度::" in out
+    assert "::warning title=抓資料::月營收逐檔回補暫停" in out
+    text = summary.read_text("utf-8")
+    assert "1979 / 3100" in text and "0 天" in text
+
+
+def test_finmind_hint_messages():
+    assert "額度" in update_data.finmind_hint(sources.FetchError("x: HTTP 402"))
+    assert "token" in update_data.finmind_hint(sources.FetchError("x: HTTP 401"))

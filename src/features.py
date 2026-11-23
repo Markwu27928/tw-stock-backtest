@@ -103,7 +103,7 @@ def revenue_features(p: Panel, d: pd.Timestamp) -> pd.DataFrame:
     revs = [_rev_row(p, m1 - k, p.rev) for k in range(13)]
     lys = [_rev_row(p, m1 - k, p.rev_ly) for k in range(13)]
     if revs[0].empty:
-        return pd.DataFrame(columns=FEATURES[:6])
+        return pd.DataFrame(columns=FEATURES[:6], dtype=float)
     codes = revs[0].index
 
     def yoy(k):
@@ -134,7 +134,7 @@ def features_at(p: Panel, d: pd.Timestamp) -> pd.DataFrame:
     """決策日 d 的全市場特徵（已套用選股母體條件）。"""
     i = p.dates.get_loc(d)
     if i < 21:
-        return pd.DataFrame(columns=FEATURES)
+        return pd.DataFrame(columns=FEATURES, dtype=float)
     tri = p.tri
     lo20 = max(0, i - 19)
     vol20 = p.volume.iloc[lo20:i + 1].sum()

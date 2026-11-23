@@ -62,6 +62,15 @@ class Budget:
         self.errors = 0
 
 
+def finmind_hint(e: Exception) -> str:
+    s = str(e)
+    if "HTTP 402" in s:
+        return "FinMind 本小時額度已用完，下次執行會接續"
+    if "HTTP 401" in s or "HTTP 403" in s:
+        return "FinMind token 無效或已過期，請到 GitHub Secrets 更新 FINMIND_TOKEN"
+    return "FinMind 暫時無法連線"
+
+
 def update_dividends(st, today, budget, log):
     start = date.fromisoformat(config.DATA_START)
     for y in range(start.year, today.year + 1):
@@ -124,6 +133,7 @@ def update_revenue(st, today, budget, log, finmind_token=None):
     if st.d["rev_source"] == "finmind":
         codes = _known_codes()
         done = set(st.d["finmind_done"])
+        fm_errors = 0
         for c in codes:
             if not budget.ok():
                 break
@@ -131,12 +141,18 @@ def update_revenue(st, today, budget, log, finmind_token=None):
                 continue
             try:
                 df = sources.fetch_revenue_finmind(c, str(start.start_time.date()), finmind_token)
-                budget.success()
+                fm_errors = 0
             except sources.FetchError as e:
-                budget.fail(e, log)
+                # FinMind 的錯誤只停掉 FinMind 這段，不計入證交所的連續錯誤，行情回補照常進行
+                fm_errors += 1
+                if fm_errors >= config.MAX_CONSECUTIVE_ERRORS:
+                    log.append(f"錯誤：{e}")
+                    log.append(f"月營收逐檔回補暫停：{finmind_hint(e)}（已完成 {len(done)}/{len(codes)} 檔）")
+                    break
                 continue
             store.save_csv(store._p("rev_finmind", f"{c}.csv.gz"), df)
             st.d["finmind_done"].append(c)
+            done.add(c)
 
 
 def _known_codes() -> list[str]:
@@ -189,6 +205,7 @@ def update_daily(st, now, budget, log):
         if (n_price + n_t86) % 40 == 0:
             st.save()
     log.append(f"每日行情新增 {n_price} 天、法人新增 {n_t86} 天")
+    return n_price, n_t86
 
 
 def coverage(st, now) -> dict:
@@ -215,14 +232,19 @@ def run(max_minutes: float, finmind_token: str | None = None) -> dict:
     st = store.State.load()
     budget = Budget(max_minutes)
     log: list[str] = []
+    new_price = new_t86 = 0
     try:
         update_dividends(st, now.date(), budget, log)
         update_revenue(st, now.date(), budget, log, finmind_token)
-        update_daily(st, now, budget, log)
+        new_price, new_t86 = update_daily(st, now, budget, log)
     finally:
         st.save()
     cov = coverage(st, now)
-    summary = {"run_at": now.isoformat(timespec="minutes"), "log": log[-30:], **cov}
+    summary = {"run_at": now.isoformat(timespec="minutes"), "log": log[-30:],
+               "new_price_days": new_price, "new_t86_days": new_t86,
+               "stopped_early": budget.blocked,
+               "warnings": [l for l in log if l.startswith(("連續錯誤過多", "月營收逐檔回補暫停"))],
+               **cov}
     (config.DATA_DIR / "update_log.json").write_text(json.dumps(summary, ensure_ascii=False, indent=1), "utf-8")
     return summary
 

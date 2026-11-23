@@ -67,6 +67,8 @@ def load_revenue() -> pd.DataFrame:
     off = pd.concat(parts, ignore_index=True) if parts else pd.DataFrame(columns=["ym", "code", "rev", "rev_ly"])
 
     fm_parts = [pd.read_csv(f, dtype={"code": str}) for f in sorted(_p("rev_finmind").glob("*.csv.gz"))]
+    # 沒有營收的股票（例如存託憑證）FinMind 檔只有表頭；合併後會把整欄變成 object，先排除
+    fm_parts = [df for df in fm_parts if len(df)]
     if fm_parts:
         fm = pd.concat(fm_parts, ignore_index=True)
         fm["period"] = pd.PeriodIndex(fm["ym"], freq="M")
@@ -77,6 +79,8 @@ def load_revenue() -> pd.DataFrame:
         key = set(zip(off["ym"], off["code"]))
         fm = fm[[(a, b) not in key for a, b in zip(fm["ym"], fm["code"])]]
         off = pd.concat([off, fm], ignore_index=True)
+    for c in ("rev", "rev_ly"):
+        off[c] = pd.to_numeric(off[c], errors="coerce")
     return off
 
 
