@@ -4,5 +4,10 @@
   "status": "no_model",
   "made_at": "08:21",
   "msg": "開盤前模型的歷史資料不足，請先執行 backfill"
+ },
+ "intraday": {
+  "status": "no_model",
+  "made_at": "09:41",
+  "msg": "盤中模型的歷史資料不足，請先執行 backfill"
  }
 }
