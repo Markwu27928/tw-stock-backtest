@@ -1,0 +1,53 @@
+<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow">
+<title>今日盤勢</title><style>
+.viz-root{color-scheme:light;--surface-0:#f4f4f2;--surface-1:#fcfcfb;--border:#e2e1dc;--text-primary:#0b0b0b;
+--text-secondary:#52514e;--text-muted:#7a7974;--series-1:#2a78d6;--series-2:#eb6834;--series-3:#8a5cf5;
+--good:#0a7d32;--bad:#c42b2b;--up:#d12f2f;--down:#13854a;--grid:#ecebe7}
+@media (prefers-color-scheme:dark){:root:where(:not([data-theme="light"])) .viz-root{color-scheme:dark;--surface-0:#111110;
+--surface-1:#1a1a19;--border:#33322f;--text-primary:#f0efec;--text-secondary:#c3c2b7;--text-muted:#8f8e86;
+--series-1:#3987e5;--series-2:#d95926;--series-3:#8a5cf5;--good:#3fbf6a;--bad:#ef6b6b;--up:#f26d6d;--down:#3fbf6a;--grid:#2a2a28}}
+*{box-sizing:border-box}body{margin:0}
+.viz-root{background:var(--surface-0);color:var(--text-primary);font:15px/1.55 -apple-system,"PingFang TC","Noto Sans TC","Microsoft JhengHei",sans-serif;min-height:100vh}
+main{max-width:760px;margin:0 auto;padding:16px 14px 48px}
+h1{font-size:20px;margin:4px 0 2px}h2{font-size:17px;margin:0 0 10px}
+.sub{color:var(--text-secondary);font-size:13px}
+.card{background:var(--surface-1);border:1px solid var(--border);border-radius:12px;padding:14px;margin:14px 0}
+.kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.kpi{border:1px solid var(--border);border-radius:10px;padding:10px}
+.kpi .v{font-size:22px;font-weight:650;font-variant-numeric:tabular-nums}
+.kpi .l{font-size:12px;color:var(--text-secondary)}
+.sw{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px;vertical-align:baseline}
+table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums;font-size:14px}
+th,td{padding:7px 4px;border-bottom:1px solid var(--grid);text-align:right;white-space:nowrap}
+th:first-child,td:first-child{text-align:left}th{color:var(--text-secondary);font-weight:500;font-size:12px}
+.scroll{overflow-x:auto}
+.ok{color:var(--good);font-weight:600}.no{color:var(--text-secondary)}
+.up{color:var(--up)}.down{color:var(--down)}
+.verdict{border-radius:10px;padding:12px;margin-bottom:12px;border:2px solid var(--border)}
+.verdict .t{font-size:19px;font-weight:700;margin-bottom:4px}
+.verdict.go{border-color:var(--up)}.verdict.watch{border-color:var(--series-2)}.verdict.no{border-color:var(--text-muted)}
+.verdict ul{margin:6px 0 0;padding-left:20px;font-size:14px}
+.win{font-weight:600}.lose{color:var(--text-secondary)}
+.tabs{display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap}
+.tabs button{border:1px solid var(--border);background:transparent;color:var(--text-primary);border-radius:999px;padding:5px 12px;font:inherit;font-size:13px}
+.tabs button[aria-pressed=true]{background:var(--text-primary);color:var(--surface-1)}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--text-secondary);margin:4px 0 6px}
+.chart{position:relative}.chart svg{display:block;width:100%;height:auto;overflow:visible}
+.tip{position:absolute;pointer-events:none;background:var(--surface-1);border:1px solid var(--border);border-radius:8px;
+padding:6px 8px;font-size:12px;box-shadow:0 2px 8px rgba(0,0,0,.12);display:none;white-space:nowrap;z-index:2}
+.note{font-size:12px;color:var(--text-muted)}
+.bar{height:8px;background:var(--grid);border-radius:4px;overflow:hidden}.bar>i{display:block;height:100%;background:var(--series-1)}
+details summary{cursor:pointer;color:var(--text-secondary);font-size:13px}
+.big{font-size:22px;font-weight:700;margin:4px 0}h3{font-size:14px;margin:12px 0 4px;color:var(--text-secondary)}</style></head>
+<body><div class="viz-root"><main>
+<h1>今日盤勢 2026-11-24（二）</h1>
+<div class="sub"><a href="index.html">← 回測報告</a>・<span class="up">紅＝漲</span> <span class="down">綠＝跌</span></div>
+<section class="card"><h2>開盤前預測（08:20）</h2><p class='note'>預測模型的歷史資料還在建立中，今天沒有開盤前預測。</p></section>
+<section class="card"><h2>盤中收盤預測（09:40）</h2><p class='note'>今天的盤中收盤預測尚未產生（每個交易日約 09:40）。</p></section>
+<section class="card"><h2>收盤整理（13:45）</h2><p class='note'>今天的收盤整理尚未產生（每個交易日約 13:45）。</p></section>
+<section class="card"><h2>三大法人（17:20）</h2><p class='note'>三大法人資料約 15:00 後公布，每個交易日約 17:20 整理。</p></section>
+<section class="card"><h2>預測紀錄</h2><p class='sub'>開盤前預測：上線後 0 天命中 —，近 20 天 —<br>09:40 預測：上線後 0 天命中 —，近 20 天 —</p><div class='scroll'><table><tr><th>日期</th><th>開盤前</th><th>09:40</th><th>實際</th></tr><tr><td>11-24</td><td>— </td><td>— </td><td class=''>—</td></tr></table></div></section>
+<p class="note">預測只看大盤（加權指數）收盤相對前一日漲或跌，僅供研究，不構成投資建議。
+每天漲跌很難預測，請以頁面上的實際命中率判斷參考價值。</p>
+</main></div></body></html>
