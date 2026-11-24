@@ -218,7 +218,13 @@ def task_preopen(force=False) -> None:
     except FetchError as e:
         warn(f"美股資料抓不到：{e}")
     catch_up(today)
-    ds, lag, stats, method = preopen_model()
+    try:
+        ds, lag, stats, method = preopen_model()
+    except RuntimeError as e:
+        warn(str(e))
+        rec["preopen"] = {"status": "no_model", "made_at": t.strftime("%H:%M"), "msg": str(e)}
+        save_day(rec)
+        return
     intr, tx, us = _load_all()
     # 今天的特徵
     days = sorted(intr["date"])
@@ -260,7 +266,13 @@ def task_intraday(force=False) -> None:
         rec["intraday"] = {"status": "closed", "made_at": t.strftime("%H:%M")}
         save_day(rec)
         return
-    ds, stats, method, cf_bt = intraday_model()
+    try:
+        ds, stats, method, cf_bt = intraday_model()
+    except RuntimeError as e:
+        warn(str(e))
+        rec["intraday"] = {"status": "no_model", "made_at": t.strftime("%H:%M"), "msg": str(e)}
+        save_day(rec)
+        return
     x = {"r_at": q["price"] / q["prev"] - 1, "gap": q["open"] / q["prev"] - 1,
          "mom": q["price"] / q["open"] - 1, "rng": (q["high"] - q["low"]) / q["prev"]}
     p = _prob_for(method, ds, M.INTRA_FEATS, x, M.INTRA_RULES)
@@ -426,6 +438,35 @@ def task_flows(force=False) -> None:
     print(json.dumps(_clean(out), ensure_ascii=False)[:1500])
 
 
+def task_probe() -> None:
+    """每個資料來源打一次，印出狀態與回應開頭，用來確認網址與格式。"""
+    import requests
+    d = trading_days_from_store()[-1]
+    checks = [("5 秒指數", lambda: S.fetch_5min_index(d)),
+              ("MIS 即時", lambda: S.fetch_mis(["t00", "2330"])),
+              ("法人金額", lambda: S.fetch_bfi82u(d)),
+              ("期交所", lambda: S.fetch_taifex_month(d - timedelta(days=5), d)),
+              ("FinMind 期貨", lambda: S.fetch_finmind_futures(d - timedelta(days=5), d, os.getenv("FINMIND_TOKEN"))),
+              ("美股", lambda: S.fetch_us("5d"))]
+    for name, fn in checks:
+        try:
+            r = fn()
+            desc = f"{len(r)} 筆" if hasattr(r, "__len__") else str(r)
+            print(f"✅ {name}：{desc}")
+            print("   ", (r.head(3).to_string() if hasattr(r, "head") else str(r)[:300]).replace("\n", "\n    "))
+        except Exception as e:  # noqa: BLE001
+            print(f"❌ {name}：{type(e).__name__} {e}")
+    # 原始回應開頭（找網址問題用）
+    for u in S.FIVE_MIN_URLS:
+        try:
+            r = requests.get(u, params={"date": d.strftime("%Y%m%d"), "response": "json"},
+                             headers=sources.HEADERS, timeout=30)
+            print(f"   {u} → HTTP {r.status_code} {r.headers.get('content-type')} {r.text[:150]!r}")
+        except Exception as e:  # noqa: BLE001
+            print(f"   {u} → {e}")
+        time.sleep(2)
+
+
 def task_backfill(minutes: float) -> None:
     t0 = time.time()
     today = now().date()
@@ -439,6 +480,11 @@ def task_backfill(minutes: float) -> None:
     n = update_intraday(days, budget_min=max(1, left - 5))
     intr = _csv("intraday.csv")
     print(f"每 5 秒指數：本次新增 {n} 天，共 {len(intr)} 天；期貨 {len(_csv('taifex.csv'))} 列；美股 {len(_csv('us.csv'))} 天")
+    problems = [k for k, v in (("每 5 秒指數", len(intr)), ("期貨", len(_csv("taifex.csv"))), ("美股", len(_csv("us.csv")))) if v == 0]
+    if problems:
+        print(f"::error title=回補失敗::{'、'.join(problems)} 一筆都沒抓到")
+        _save_meta(dict(_meta(), backfill_at=now().strftime("%Y-%m-%d %H:%M"), backfill_failed=problems))
+        raise SystemExit(1)
     # 回補完成後跑一次回測，存下各方法命中率
     meta = _meta()
     try:
@@ -458,7 +504,7 @@ def task_backfill(minutes: float) -> None:
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("task", choices=["preopen", "intraday", "close", "flows", "backfill", "render"])
+    ap.add_argument("task", choices=["preopen", "intraday", "close", "flows", "backfill", "render", "probe"])
     ap.add_argument("--force", action="store_true")
     ap.add_argument("--minutes", type=float, default=300)
     a = ap.parse_args()
@@ -466,11 +512,13 @@ def main() -> int:
     try:
         if a.task == "backfill":
             task_backfill(a.minutes)
+        elif a.task == "probe":
+            task_probe()
         elif a.task != "render":
             {"preopen": task_preopen, "intraday": task_intraday, "close": task_close,
              "flows": task_flows}[a.task](force=a.force)
     finally:
-        if a.task != "backfill":
+        if a.task not in ("backfill", "probe"):
             today_page.write()
     return 0
 

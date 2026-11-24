@@ -61,6 +61,8 @@ def _stats_table(stats: dict, chosen: str | None) -> str:
 def _preopen_html(p: dict, meta: dict) -> str:
     if not p:
         return "<p class='note'>今天的開盤前預測尚未產生（每個交易日約 08:20）。</p>"
+    if p.get("status") == "no_model":
+        return "<p class='note'>預測模型的歷史資料還在建立中，今天沒有開盤前預測。</p>"
     if p.get("status") != "ok":
         return "<p class='note'>今天沒有開盤前預測（可能休市，或期貨夜盤資料尚未公布）。</p>"
     x = p["inputs"]
@@ -82,6 +84,8 @@ def _preopen_html(p: dict, meta: dict) -> str:
 def _intraday_html(p: dict) -> str:
     if not p:
         return "<p class='note'>今天的盤中收盤預測尚未產生（每個交易日約 09:40）。</p>"
+    if p.get("status") == "no_model":
+        return "<p class='note'>預測模型的歷史資料還在建立中，今天沒有盤中預測。</p>"
     if p.get("status") != "ok":
         return "<p class='note'>今天沒有盤中預測（可能休市）。</p>"
     res = ""

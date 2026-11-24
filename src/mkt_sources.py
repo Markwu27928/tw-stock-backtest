@@ -53,9 +53,25 @@ def summarize_5min(df: pd.DataFrame, at: str = "09:40:00") -> dict:
             "close": float(df["idx"].iloc[-1])}
 
 
+# 證交所改版過網址，依序嘗試；第一個成功的記下來之後直接用
+FIVE_MIN_URLS = [f"{TWSE}/TAIEX/MI_5MINS_INDEX",
+                 "https://www.twse.com.tw/exchangeReport/MI_5MINS_INDEX",
+                 f"{TWSE}/afterTrading/MI_5MINS_INDEX"]
+_good = {}
+
+
 def fetch_5min_index(d: date) -> pd.DataFrame | None:
-    return parse_5min_index(sources.get_json(f"{TWSE}/afterTrading/MI_5MINS_INDEX",
-                                             {"date": d.strftime("%Y%m%d"), "response": "json"}))
+    urls = [_good["5min"]] if "5min" in _good else FIVE_MIN_URLS
+    last = None
+    for u in urls:
+        try:
+            js = sources.get_json(u, {"date": d.strftime("%Y%m%d"), "response": "json"})
+        except FetchError as e:
+            last = e
+            continue
+        _good["5min"] = u
+        return parse_5min_index(js)
+    raise last or FetchError("MI_5MINS_INDEX：沒有可用網址")
 
 
 # ---------------------------------------------------------------- MIS 即時報價
@@ -171,7 +187,10 @@ def fetch_taifex_month(s: date, e: date, tries: int = 3) -> pd.DataFrame:
             last = f"期交所：HTTP {r.status_code}"
             continue
         text = r.content.decode("cp950", errors="replace")
-        return parse_taifex_csv(text) if "交易日期" in text else pd.DataFrame(columns=["date", "session", "close"])
+        if "交易日期" not in text:            # 每個月都有交易日，拿不到 CSV 就是被擋或網址錯
+            last = f"期交所回應不是 CSV：{text[:120]!r}"
+            continue
+        return parse_taifex_csv(text)
     raise FetchError(last or "期交所：未知錯誤")
 
 
