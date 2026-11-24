@@ -110,25 +110,30 @@ def _append_intraday(rows):
 
 
 def update_taifex(start: date, end: date) -> None:
-    """期交所逐月抓、失敗重試；仍失敗的月份改用 FinMind 補。都失敗只發警告，不中斷其他工作。"""
-    failed = []
+    """台指期：FinMind 為主（一年一次請求）；失敗或沒資料才逐月改抓期交所。都失敗只警告，不中斷。"""
+    def save(new):
+        if len(new):
+            _save_csv(pd.concat([_csv("taifex.csv"), new], ignore_index=True), "taifex.csv", ["date", "session"])
+    try:
+        new = S.fetch_finmind_futures(start, end, os.getenv("FINMIND_TOKEN"))
+        if len(new):
+            save(new)
+            print(f"台指期（FinMind）：{len(new)} 列")
+            return
+        print("FinMind 台指期沒有資料，改抓期交所")
+    except FetchError as ex:
+        print("FinMind 台指期失敗，改抓期交所：", ex)
+    n = 0
     for s, e in S.month_ranges(start, end):
         try:
             new = S.fetch_taifex_month(s, e)
         except FetchError as ex:
             print("期交所失敗", s, ex)
-            failed.append((s, e))
             continue
-        if len(new):
-            _save_csv(pd.concat([_csv("taifex.csv"), new], ignore_index=True), "taifex.csv", ["date", "session"])
-    if failed:
-        s, e = failed[0][0], failed[-1][1]
-        try:
-            new = S.fetch_finmind_futures(s, e, os.getenv("FINMIND_TOKEN"))
-            _save_csv(pd.concat([_csv("taifex.csv"), new], ignore_index=True), "taifex.csv", ["date", "session"])
-            print(f"期交所有 {len(failed)} 個月抓不到，已改用 FinMind 補上 {len(new)} 列")
-        except FetchError as ex:
-            warn(f"台指期資料抓不到（期交所 {len(failed)} 個月失敗，FinMind 也失敗：{ex}）")
+        save(new)
+        n += len(new)
+    if n == 0:
+        warn("台指期資料抓不到（FinMind 與期交所都沒有資料）")
 
 
 def update_us(range_: str) -> None:
