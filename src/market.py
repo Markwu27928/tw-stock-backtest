@@ -197,13 +197,21 @@ def intraday_model():
     return ds, stats, M.choose(stats), M.close_forecast_backtest(ds)
 
 
-def _prob_for(method: str, ds: pd.DataFrame, feats: list[str], x: dict, rules: dict) -> float:
+def _prob_for(method: str, ds: pd.DataFrame, feats: list[str], x: dict, rules: dict) -> dict:
+    """回傳 pred_up（預測方向）與 prob_up（收漲機率）。
+
+    規則型方法本身只給漲或跌，機率改用「歷史上出現同樣訊號的日子，實際收漲的比例」，
+    避免頁面顯示 0% / 100% 這種誤導的數字。"""
     if method == "logit":
-        m = M._logit().fit(ds.dropna(subset=feats + ["y"])[feats].values * 100,
-                           ds.dropna(subset=feats + ["y"])["y"].values)
-        return float(m.predict_proba(np.array([[x[f] for f in feats]]) * 100)[0, 1])
-    row = pd.DataFrame([x])
-    return float(rules[method](row).iloc[0])
+        tr = ds.dropna(subset=feats + ["y"])
+        m = M._logit().fit(tr[feats].values * 100, tr["y"].values)
+        p = float(m.predict_proba(np.array([[x[f] for f in feats]]) * 100)[0, 1])
+        return {"pred_up": p > 0.5, "prob_up": p, "prob_kind": "model", "prob_n": int(len(tr))}
+    today_sig = float(rules[method](pd.DataFrame([x])).iloc[0])
+    hist = ds.dropna(subset=["y"])
+    same = hist[rules[method](hist) == today_sig]
+    return {"pred_up": today_sig > 0.5, "prob_up": float(same["y"].mean()) if len(same) else None,
+            "prob_kind": "history", "prob_n": int(len(same))}
 
 
 # ---------------------------------------------------------------- 任務
@@ -247,9 +255,9 @@ def task_preopen(force=False) -> None:
          **{c: float(u[c].iloc[0]) if c in u and len(u) else np.nan for c in ("spx", "sox", "tsm")}}
     if method == "logit" and not all(np.isfinite(x[f]) for f in M.PRE_FEATS):
         method = "night"
-    p = _prob_for(method, ds, M.PRE_FEATS, x, M.PRE_RULES)
+    pr = _prob_for(method, ds, M.PRE_FEATS, x, M.PRE_RULES)
     rec["preopen"] = {"status": "ok", "made_at": t.strftime("%H:%M"), "method": method,
-                      "method_name": M.NAMES[method], "prob_up": p, "pred_up": p > 0.5,
+                      "method_name": M.NAMES[method], **pr,
                       "inputs": x, "stats": stats, "night_alignment": lag}
     save_day(rec)
     print(json.dumps(_clean(rec["preopen"]), ensure_ascii=False))
@@ -280,11 +288,11 @@ def task_intraday(force=False) -> None:
         return
     x = {"r_at": q["price"] / q["prev"] - 1, "gap": q["open"] / q["prev"] - 1,
          "mom": q["price"] / q["open"] - 1, "rng": (q["high"] - q["low"]) / q["prev"]}
-    p = _prob_for(method, ds, M.INTRA_FEATS, x, M.INTRA_RULES)
+    pr = _prob_for(method, ds, M.INTRA_FEATS, x, M.INTRA_RULES)
     cf = M.close_forecast(ds, x)
     rec["intraday"] = {"status": "ok", "made_at": t.strftime("%H:%M"), "quote_time": q["time"],
                        "index": q["price"], "prev": q["prev"], "open": q["open"],
-                       "method": method, "method_name": M.NAMES[method], "prob_up": p, "pred_up": p > 0.5,
+                       "method": method, "method_name": M.NAMES[method], **pr,
                        "close_mid": q["prev"] * (1 + cf["ret"]), "close_lo": q["prev"] * (1 + cf["lo"]),
                        "close_hi": q["prev"] * (1 + cf["hi"]), "inputs": x, "stats": stats,
                        "close_backtest": cf_bt}

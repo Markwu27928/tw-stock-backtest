@@ -58,6 +58,17 @@ def _stats_table(stats: dict, chosen: str | None) -> str:
             "回測從 2019 年起逐月滾動，只用過去資料訓練。</p>")
 
 
+def _prob_line(p: dict) -> str:
+    """規則型方法顯示歷史比例，模型顯示模型機率；舊紀錄沒有 prob_kind 時不顯示 0%/100%。"""
+    kind, prob, n = p.get("prob_kind"), p.get("prob_up"), p.get("prob_n")
+    if kind == "history" and prob is not None:
+        return (f"<p class='sub'>歷史上出現同樣訊號的 {n:,} 天中，收漲的比例是 <b>{_pct(prob, 0)}</b>"
+                f"（收跌 {_pct(1 - prob, 0)}）</p>")
+    if kind == "model" and prob is not None:
+        return f"<p class='sub'>模型估計收漲機率 <b>{_pct(prob, 0)}</b></p>"
+    return ""
+
+
 def _preopen_html(p: dict, meta: dict) -> str:
     if not p:
         return "<p class='note'>今天的開盤前預測尚未產生（每個交易日約 08:20）。</p>"
@@ -69,7 +80,7 @@ def _preopen_html(p: dict, meta: dict) -> str:
     res = ""
     if p.get("hit") is not None:
         res = f"<p class='sub'>收盤結果：{_arrow(p['actual_up'])}，預測{'<b class=ok>命中</b>' if p['hit'] else '未命中'}</p>"
-    return (f"<p class='big'>{_arrow(p['pred_up'])}　上漲機率 {_pct(p['prob_up'], 0)}</p>"
+    return (f"<p class='big'>{_arrow(p['pred_up'])}</p>{_prob_line(p)}"
             f"<p class='sub'>{p['made_at']} 產生・方法：{html.escape(p['method_name'])}</p>{res}"
             "<div class='scroll'><table><tr><th>依據</th><th>漲跌</th></tr>"
             f"<tr><td>台指期夜盤（對前一日日盤收盤）</td><td class='{_sign_cls(x.get('night_ret'))}'>{_pct(x.get('night_ret'), 2, True)}</td></tr>"
@@ -93,7 +104,7 @@ def _intraday_html(p: dict) -> str:
         res = (f"<p class='sub'>實際收盤 {_n(p['close_actual'])}，方向{'<b class=ok>命中</b>' if p['hit'] else '未命中'}，"
                f"{'在' if p['in_range'] else '不在'}預測區間內</p>")
     bt = p.get("close_backtest") or {}
-    return (f"<p class='big'>{_arrow(p['pred_up'])}　收盤上漲機率 {_pct(p['prob_up'], 0)}</p>"
+    return (f"<p class='big'>{_arrow(p['pred_up'])}</p>{_prob_line(p)}"
             f"<p class='sub'>{p['made_at']} 產生（報價時間 {html.escape(str(p.get('quote_time', '')))}），"
             f"當時加權指數 {_n(p['index'])}（{_pct(p['index'] / p['prev'] - 1, 2, True)}）・方法：{html.escape(p['method_name'])}</p>"
             f"<p class='sub'>收盤預估 <b>{_n(p['close_mid'], 0)}</b>，80% 區間 {_n(p['close_lo'], 0)} ～ {_n(p['close_hi'], 0)}</p>{res}"

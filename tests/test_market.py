@@ -197,3 +197,21 @@ def test_holiday_is_skipped(mkt_env, monkeypatch):
     monkeypatch.setenv("BT_FAKE_NOW", "2026-11-28T08:20")      # 週六
     market.task_preopen()
     assert "preopen" not in market.load_day("2026-11-28")
+
+
+def test_rule_probability_is_historical_rate():
+    """規則型方法不可回傳 0/1，要回傳歷史上同樣訊號時實際收漲的比例。"""
+    ds = M.intraday_dataset(_fake_intraday(1500))
+    x = {"r_at": -0.01, "gap": -0.005, "mom": -0.005, "rng": 0.01}
+    pr = market._prob_for("sign_at", ds, M.INTRA_FEATS, x, M.INTRA_RULES)
+    down_days = ds[ds["r_at"] <= 0]
+    assert pr["pred_up"] is False and pr["prob_kind"] == "history"
+    assert abs(pr["prob_up"] - down_days["y"].mean()) < 1e-12 and pr["prob_n"] == len(down_days)
+    assert 0 < pr["prob_up"] < 0.5
+
+
+def test_close_interval_scales_with_volatility():
+    ds = M.intraday_dataset(_fake_intraday(1500))
+    calm = M.close_forecast(ds, {"r_at": 0.0, "gap": 0.0, "rng": 0.002})
+    wild = M.close_forecast(ds, {"r_at": 0.0, "gap": 0.0, "rng": 0.02})
+    assert (wild["hi"] - wild["lo"]) > 5 * (calm["hi"] - calm["lo"])
