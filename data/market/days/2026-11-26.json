@@ -1,0 +1,37 @@
+{
+ "date": "2026-11-26",
+ "preopen": {
+  "status": "ok",
+  "made_at": "08:21",
+  "method": "night",
+  "method_name": "照期貨夜盤方向",
+  "pred_up": true,
+  "prob_up": 0.73115,
+  "prob_kind": "history",
+  "prob_n": 1313,
+  "inputs": {
+   "night_ret": 0.008801,
+   "spx": -0.002543,
+   "sox": -0.006526,
+   "tsm": -0.019645
+  },
+  "stats": {
+   "up": {
+    "acc": 0.555904,
+    "n": 1914,
+    "acc_250": 0.552
+   },
+   "night": {
+    "acc": 0.715256,
+    "n": 1914,
+    "acc_250": 0.756
+   },
+   "logit": {
+    "acc": 0.713689,
+    "n": 1914,
+    "acc_250": 0.776
+   }
+  },
+  "night_alignment": 0
+ }
+}
