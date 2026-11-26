@@ -19,7 +19,7 @@ from zoneinfo import ZoneInfo
 import numpy as np
 import pandas as pd
 
-from . import config, live_log, mkt_models as M, mkt_sources as S, sources, store
+from . import config, live_log, mkt_models as M, mkt_sources as S, rule_rebound as RR, sources, store
 from .sources import FetchError
 
 TPE = ZoneInfo("Asia/Taipei")
@@ -412,6 +412,12 @@ def task_close(force=False, wait_min: float = 25) -> None:
                 pr["close_actual"] = q["price"]
                 pr["in_range"] = bool(pr["close_lo"] <= q["price"] <= pr["close_hi"])
     rec["close"] = c
+    try:
+        q2 = S.fetch_mis(RR.ASSETS)
+        live = {"t00": q["price"], **{a: close_map.get(a) or (q2.get(a) or {}).get("price") for a in RR.ASSETS}}
+        rec["rule"] = _rule_record(RR.replay(*rule_inputs(live)), now().strftime("%H:%M"), final=True)
+    except Exception as e:  # noqa: BLE001  規則失敗不影響收盤整理
+        warn(f"超跌反彈規則收盤確認失敗：{e}")
     save_day(rec)
     # 今天的每 5 秒指數（明天的模型會用到）；還沒公布就交給下一次 catch_up
     try:
@@ -419,6 +425,60 @@ def task_close(force=False, wait_min: float = 25) -> None:
     except FetchError as e:
         print("MI_5MINS_INDEX", e)
     print(json.dumps(_clean(c), ensure_ascii=False)[:2000])
+
+
+def rule_inputs(live: dict | None = None):
+    """加權指數收盤（每 5 秒指數的收盤）與規則標的收盤；live＝今天盤中暫定價（{'t00': 價, '0050': 價, ...}）。"""
+    intr = _csv("intraday.csv")
+    idx = pd.Series(intr["close"].values, index=pd.to_datetime(intr["date"])).sort_index()
+    px = store.load_daily("price")
+    px = px[px["code"].isin(RR.ASSETS)]
+    prices = px.pivot_table(index="date", columns="code", values="close")
+    prices.index = pd.to_datetime(prices.index)
+    if live:
+        today = pd.Timestamp(now().date())
+        idx.loc[today] = live["t00"]
+        prices = prices.reindex(prices.index.union([today]))
+        for a in RR.ASSETS:
+            if live.get(a) and np.isfinite(live[a]):
+                prices.loc[today, a] = live[a]
+        idx = idx.sort_index()
+    prices = prices.reindex(columns=RR.ASSETS).reindex(idx.index).ffill()
+    return idx, prices
+
+
+def _rule_record(res: dict, made_at: str, final: bool) -> dict:
+    closed = sorted((t for t in res["trades"] if "ret" in t), key=lambda t: (t["entry_date"], t["asset"]))
+    return {"made_at": made_at, "final": final, **{k: res[k] for k in ("date", "rsi", "lower", "index", "cond", "new", "prev_cond")},
+            "open": res["open"], "recent": closed[-12:],
+            "stats": RR.stats(res["trades"], config.FEE_RATE * 2 + 0.001, config.ROUND_TRIP_COST)}
+
+
+def task_midday(force=False) -> None:
+    """12:40：用即時價格暫時判斷超跌反彈規則（買進訊號與出場條件）。"""
+    t = now()
+    today = t.date()
+    rec = load_day(today.isoformat())
+    if rec.get("midday") and not force:
+        print("今天的 12:40 規則檢查已完成，略過")
+        return
+    if today.weekday() >= 5:
+        print("週末不開盤")
+        return
+    q = S.fetch_mis(["t00"] + RR.ASSETS)
+    if not q.get("t00") or q["t00"]["date"] != today.strftime("%Y%m%d"):
+        print("今天沒有盤中資料，可能休市")
+        rec["midday"] = {"status": "closed", "made_at": t.strftime("%H:%M")}
+        save_day(rec)
+        return
+    live = {"t00": q["t00"]["price"], **{a: (q.get(a) or {}).get("price") for a in RR.ASSETS}}
+    res = RR.replay(*rule_inputs(live))
+    rec["midday"] = {"status": "ok", "quote_time": q["t00"]["time"],
+                     **_rule_record(res, t.strftime("%H:%M"), final=False)}
+    save_day(rec)
+    print(json.dumps(_clean({k: rec["midday"][k] for k in ("rsi", "lower", "index", "cond", "new")}), ensure_ascii=False))
+    if res["new"]:
+        warn(f"超跌反彈規則：出現新的買進訊號（RSI {res['rsi']:.1f}，指數 {res['index']:.0f} ≤ 下軌 {res['lower']:.0f}）")
 
 
 def task_flows(force=False) -> None:
@@ -517,7 +577,7 @@ def task_backfill(minutes: float) -> None:
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("task", choices=["preopen", "intraday", "close", "flows", "backfill", "render", "probe"])
+    ap.add_argument("task", choices=["preopen", "intraday", "midday", "close", "flows", "backfill", "render", "probe"])
     ap.add_argument("--force", action="store_true")
     ap.add_argument("--minutes", type=float, default=300)
     a = ap.parse_args()
@@ -528,7 +588,7 @@ def main() -> int:
         elif a.task == "probe":
             task_probe()
         elif a.task != "render":
-            {"preopen": task_preopen, "intraday": task_intraday, "close": task_close,
+            {"preopen": task_preopen, "intraday": task_intraday, "midday": task_midday, "close": task_close,
              "flows": task_flows}[a.task](force=a.force)
     finally:
         if a.task not in ("backfill", "probe"):

@@ -174,6 +174,75 @@ def _flows_html(f: dict) -> str:
     return out + "<p class='note'>個股金額＝買賣超股數 × 收盤價，為估計值。</p>"
 
 
+NAMES_RULE = {"0050": "元大台灣50", "2330": "台積電", "2317": "鴻海", "2454": "聯發科", "1717": "長興"}
+
+
+def _macd_state(t: dict) -> str:
+    m = t["macd"]
+    if m["sold"]:
+        e = t.get("macd_exit") or {}
+        return f"已賣（{e.get('date', '')[5:]}，{_pct(e.get('ret'), 1, True)}）"
+    h = m["hist"]
+    if not m["armed"]:
+        return f"等柱狀體轉正（目前 {h[-1]:+.2f}）"
+    trend = "、".join(f"{x:+.2f}" for x in h)
+    return f"已轉正，連續 2 天縮小就賣（近 3 天 {trend}）"
+
+
+def _ma_state(t: dict) -> str:
+    a = t["ma20"]
+    if a["sold"]:
+        e = t.get("ma20_exit") or {}
+        return f"已賣（{e.get('date', '')[5:]}，{_pct(e.get('ret'), 1, True)}）"
+    if not a["armed"]:
+        return f"等站上 20 日線（{a['ma']:,.2f}，還差 {_pct(-a['gap'], 1)}）"
+    return f"已站上，收盤跌破 {a['ma']:,.2f} 就賣（目前高 {_pct(a['gap'], 1)}）"
+
+
+def _rule_html(day: dict) -> str:
+    r = day.get("rule") or day.get("midday") or {}
+    if not r:
+        return "<p class='note'>今天的規則檢查尚未產生（每個交易日約 12:40，收盤後再確認）。</p>"
+    if r.get("status") == "closed":
+        return "<p class='note'>今天休市。</p>"
+    when = "收盤確認" if r.get("final") else f"{r.get('made_at')} 盤中暫定（以當下價格當作收盤判斷，收盤後會再確認）"
+    if r["new"]:
+        head = "<p class='big up'>⚠️ 出現買進訊號</p>"
+    elif r["cond"]:
+        head = "<p class='big'>條件仍成立（訊號延續中，不重複進場）</p>"
+    else:
+        head = "<p class='big'>沒有買進訊號</p>"
+    out = (head + f"<p class='sub'>{when}</p>"
+           f"<p class='sub'>加權指數 {_n(r['index'], 0)}・RSI {r['rsi']:.1f}（低於 30 才符合）・"
+           f"布林下軌 {_n(r['lower'], 0)}（{'已碰到' if r['index'] <= r['lower'] else '尚未碰到'}）</p>")
+    op = r.get("open") or {}
+    if op:
+        trs = "".join(
+            f"<tr><td>{a} {NAMES_RULE.get(a, '')}</td><td>{t['entry_date'][5:]}</td><td>{_n(t['entry_price'])}</td>"
+            f"<td class='{_sign_cls(t['now_ret'])}'>{_pct(t['now_ret'], 1, True)}</td>"
+            f"<td style='text-align:left;white-space:normal'>{_macd_state(t)}</td>"
+            f"<td style='text-align:left;white-space:normal'>{_ma_state(t)}</td></tr>" for a, t in op.items())
+        out += ("<h3>規則推算的持有部位（各分兩半出場）</h3><div class='scroll'><table><tr><th>標的</th><th>進場</th>"
+                "<th>進場價</th><th>報酬</th><th>一半：MACD</th><th>另一半：20 日線</th></tr>" + trs + "</table></div>")
+    else:
+        out += "<p class='sub'>目前沒有持有部位。</p>"
+    rec = r.get("recent") or []
+    if rec:
+        trs = "".join(f"<tr><td>{t['entry_date']}{' ★' if t.get('live') else ''}</td><td>{t['asset']}</td>"
+                      f"<td class='{_sign_cls(t['ret'])}'>{_pct(t['ret'], 1, True)}</td><td>{t['days']}</td></tr>"
+                      for t in reversed(rec))
+        out += ("<details><summary>最近結束的交易</summary><div class='scroll'><table><tr><th>進場日</th><th>標的</th>"
+                f"<th>報酬（兩半平均）</th><th>天數</th></tr>{trs}</table></div></details>")
+    st = r.get("stats") or {}
+    bt, lv = st.get("回測") or {}, st.get("上線後") or {}
+    out += (f"<p class='note'>回測（2016 起，0050 與觀察清單合計）{bt.get('n', 0)} 筆，勝率 {_pct(bt.get('win'), 0)}，"
+            f"每筆平均 {_pct(bt.get('avg'), 2, True)}（已扣成本）。上線後 {lv.get('n', 0)} 筆"
+            + (f"，勝率 {_pct(lv.get('win'), 0)}，每筆 {_pct(lv.get('avg'), 2, True)}" if lv.get("n") else "") + "。★＝上線後。</p>"
+            "<p class='note'>這是依規則從歷史資料推算的部位，不是你實際的持股；訊號出現後大盤仍可能再跌 15% 以上"
+            "（2020-03、2025-03 都發生過），大量買進前請確認能承受。僅供研究，不構成投資建議。</p>")
+    return out
+
+
 def _history_html(days: list[dict]) -> str:
     rows = []
     for d in reversed(days[-30:]):
@@ -206,6 +275,7 @@ def render() -> str:
 <div class="sub"><a href="index.html">← 回測報告</a>・<span class="up">紅＝漲</span> <span class="down">綠＝跌</span></div>
 <section class="card"><h2>開盤前預測（08:20）</h2>{_preopen_html(today.get('preopen') or {}, meta)}</section>
 <section class="card"><h2>盤中收盤預測（09:40）</h2>{_intraday_html(today.get('intraday') or {})}</section>
+<section class="card"><h2>超跌反彈規則（12:40）</h2>{_rule_html(today)}</section>
 <section class="card"><h2>收盤整理（13:45）</h2>{_close_html(today.get('close') or {})}</section>
 <section class="card"><h2>三大法人（17:20）</h2>{_flows_html(today.get('flows') or {})}</section>
 <section class="card"><h2>預測紀錄</h2>{rec_html}{_history_html(days)}</section>
