@@ -33,5 +33,50 @@
    }
   },
   "night_alignment": 0
+ },
+ "intraday": {
+  "status": "ok",
+  "made_at": "09:41",
+  "quote_time": "09:40:00",
+  "index": 38861.62,
+  "prev": 38195.43,
+  "open": 38435.99,
+  "method": "sign_at",
+  "method_name": "照 09:40 當下漲跌",
+  "pred_up": true,
+  "prob_up": 0.820996,
+  "prob_kind": "history",
+  "prob_n": 1486,
+  "close_mid": 38874.246506,
+  "close_lo": 37755.231388,
+  "close_hi": 39965.008661,
+  "inputs": {
+   "r_at": 0.017442,
+   "gap": 0.006298,
+   "mom": 0.011074,
+   "rng": 0.025151
+  },
+  "stats": {
+   "up": {
+    "acc": 0.555904,
+    "n": 1914,
+    "acc_250": 0.552
+   },
+   "sign_at": {
+    "acc": 0.812957,
+    "n": 1914,
+    "acc_250": 0.84
+   },
+   "logit": {
+    "acc": 0.809822,
+    "n": 1914,
+    "acc_250": 0.836
+   }
+  },
+  "close_backtest": {
+   "coverage_80": 0.812957,
+   "mae": 0.004789,
+   "n": 1914
+  }
  }
 }
