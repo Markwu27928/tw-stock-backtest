@@ -78,5 +78,362 @@
    "mae": 0.00479,
    "n": 1915
   }
+ },
+ "midday": {
+  "status": "ok",
+  "quote_time": "12:40:40",
+  "made_at": "12:41",
+  "final": false,
+  "date": "2026-11-27",
+  "rsi": 42.398638,
+  "lower": 35907.854124,
+  "index": 39363.0,
+  "cond": false,
+  "new": false,
+  "prev_cond": false,
+  "open": {
+   "0050": {
+    "asset": "0050",
+    "entry_date": "2026-11-03",
+    "entry_price": 100.6,
+    "macd_exit": null,
+    "ma20_exit": null,
+    "live": false,
+    "open": true,
+    "now_price": 92.725,
+    "now_ret": -0.07828,
+    "days": 18,
+    "macd": {
+     "hist": [
+      -0.506485,
+      -0.20461,
+      0.023752
+     ],
+     "armed": true,
+     "sold": false
+    },
+    "ma20": {
+     "ma": 95.78875,
+     "gap": -0.031984,
+     "armed": false,
+     "sold": false
+    }
+   },
+   "2330": {
+    "asset": "2330",
+    "entry_date": "2026-11-20",
+    "entry_price": 2000.0,
+    "macd_exit": null,
+    "ma20_exit": null,
+    "live": false,
+    "open": true,
+    "now_price": 2170.0,
+    "now_ret": 0.085,
+    "days": 5,
+    "macd": {
+     "hist": [
+      -7.253483,
+      -3.666155,
+      0.995611
+     ],
+     "armed": true,
+     "sold": false
+    },
+    "ma20": {
+     "ma": 2212.5,
+     "gap": -0.019209,
+     "armed": false,
+     "sold": false
+    }
+   },
+   "2317": {
+    "asset": "2317",
+    "entry_date": "2026-11-03",
+    "entry_price": 245.5,
+    "macd_exit": {
+     "date": "2026-11-05",
+     "price": 235.0,
+     "ret": -0.04277
+    },
+    "ma20_exit": null,
+    "live": false,
+    "open": true,
+    "now_price": 220.25,
+    "now_ret": -0.102851,
+    "days": 18,
+    "macd": {
+     "hist": [
+      -2.10495,
+      -1.50122,
+      -0.740582
+     ],
+     "armed": true,
+     "sold": true
+    },
+    "ma20": {
+     "ma": 228.2125,
+     "gap": -0.034891,
+     "armed": false,
+     "sold": false
+    }
+   },
+   "1717": {
+    "asset": "1717",
+    "entry_date": "2026-11-03",
+    "entry_price": 62.3,
+    "macd_exit": null,
+    "ma20_exit": null,
+    "live": false,
+    "open": true,
+    "now_price": 53.35,
+    "now_ret": -0.14366,
+    "days": 18,
+    "macd": {
+     "hist": [
+      -0.572207,
+      -0.304918,
+      -0.073037
+     ],
+     "armed": false,
+     "sold": false
+    },
+    "ma20": {
+     "ma": 57.4275,
+     "gap": -0.071003,
+     "armed": false,
+     "sold": false
+    }
+   }
+  },
+  "recent": [
+   {
+    "asset": "0050",
+    "entry_date": "2024-08-05",
+    "entry_price": 158.75,
+    "macd_exit": {
+     "date": "2024-08-22",
+     "price": 180.85,
+     "ret": 0.139213
+    },
+    "ma20_exit": {
+     "date": "2024-09-04",
+     "price": 171.25,
+     "ret": 0.07874
+    },
+    "live": false,
+    "ret": 0.108976,
+    "days": 22
+   },
+   {
+    "asset": "1717",
+    "entry_date": "2024-08-05",
+    "entry_price": 27.9,
+    "macd_exit": {
+     "date": "2024-09-03",
+     "price": 30.6,
+     "ret": 0.096774
+    },
+    "ma20_exit": {
+     "date": "2024-09-04",
+     "price": 29.35,
+     "ret": 0.051971
+    },
+    "live": false,
+    "ret": 0.074373,
+    "days": 22
+   },
+   {
+    "asset": "2317",
+    "entry_date": "2024-08-05",
+    "entry_price": 168.0,
+    "macd_exit": {
+     "date": "2024-08-23",
+     "price": 180.0,
+     "ret": 0.071429
+    },
+    "ma20_exit": {
+     "date": "2024-08-21",
+     "price": 183.5,
+     "ret": 0.092262
+    },
+    "live": false,
+    "ret": 0.081845,
+    "days": 14
+   },
+   {
+    "asset": "2330",
+    "entry_date": "2024-08-05",
+    "entry_price": 815.0,
+    "macd_exit": {
+     "date": "2024-08-22",
+     "price": 951.0,
+     "ret": 0.166871
+    },
+    "ma20_exit": {
+     "date": "2024-09-03",
+     "price": 940.0,
+     "ret": 0.153374
+    },
+    "live": false,
+    "ret": 0.160123,
+    "days": 21
+   },
+   {
+    "asset": "2454",
+    "entry_date": "2024-08-05",
+    "entry_price": 991.0,
+    "macd_exit": {
+     "date": "2024-08-22",
+     "price": 1230.0,
+     "ret": 0.241171
+    },
+    "ma20_exit": {
+     "date": "2024-09-04",
+     "price": 1135.0,
+     "ret": 0.145308
+    },
+    "live": false,
+    "ret": 0.193239,
+    "days": 22
+   },
+   {
+    "asset": "0050",
+    "entry_date": "2025-03-31",
+    "entry_price": 172.75,
+    "macd_exit": {
+     "date": "2025-05-07",
+     "price": 170.35,
+     "ret": -0.013893
+    },
+    "ma20_exit": {
+     "date": "2025-06-02",
+     "price": 175.9,
+     "ret": 0.018234
+    },
+    "live": false,
+    "ret": 0.002171,
+    "days": 41
+   },
+   {
+    "asset": "1717",
+    "entry_date": "2025-03-31",
+    "entry_price": 27.8,
+    "macd_exit": {
+     "date": "2025-04-25",
+     "price": 25.5,
+     "ret": -0.082734
+    },
+    "ma20_exit": {
+     "date": "2025-05-15",
+     "price": 26.1,
+     "ret": -0.061151
+    },
+    "live": false,
+    "ret": -0.071942,
+    "days": 30
+   },
+   {
+    "asset": "2317",
+    "entry_date": "2025-03-31",
+    "entry_price": 146.0,
+    "macd_exit": {
+     "date": "2025-05-08",
+     "price": 146.0,
+     "ret": 0.0
+    },
+    "ma20_exit": {
+     "date": "2025-06-02",
+     "price": 152.5,
+     "ret": 0.044521
+    },
+    "live": false,
+    "ret": 0.02226,
+    "days": 41
+   },
+   {
+    "asset": "2330",
+    "entry_date": "2025-03-31",
+    "entry_price": 910.0,
+    "macd_exit": {
+     "date": "2025-04-22",
+     "price": 816.0,
+     "ret": -0.103297
+    },
+    "ma20_exit": {
+     "date": "2025-06-02",
+     "price": 946.0,
+     "ret": 0.03956
+    },
+    "live": false,
+    "ret": -0.031868,
+    "days": 41
+   },
+   {
+    "asset": "2454",
+    "entry_date": "2025-03-31",
+    "entry_price": 1390.0,
+    "macd_exit": {
+     "date": "2025-05-02",
+     "price": 1300.0,
+     "ret": -0.064748
+    },
+    "ma20_exit": {
+     "date": "2025-04-02",
+     "price": 1435.0,
+     "ret": 0.032374
+    },
+    "live": false,
+    "ret": -0.016187,
+    "days": 21
+   },
+   {
+    "asset": "2330",
+    "entry_date": "2026-11-03",
+    "entry_price": 2295.0,
+    "macd_exit": {
+     "date": "2026-11-17",
+     "price": 2170.0,
+     "ret": -0.054466
+    },
+    "ma20_exit": {
+     "date": "2026-11-12",
+     "price": 2340.0,
+     "ret": 0.019608
+    },
+    "live": false,
+    "ret": -0.017429,
+    "days": 10
+   },
+   {
+    "asset": "2454",
+    "entry_date": "2026-11-03",
+    "entry_price": 3675.0,
+    "macd_exit": {
+     "date": "2026-11-20",
+     "price": 3350.0,
+     "ret": -0.088435
+    },
+    "ma20_exit": {
+     "date": "2026-11-16",
+     "price": 3795.0,
+     "ret": 0.032653
+    },
+    "live": false,
+    "ret": -0.027891,
+    "days": 13
+   }
+  ],
+  "stats": {
+   "回測": {
+    "n": 68,
+    "win": 0.632353,
+    "avg": 0.022005
+   },
+   "上線後": {
+    "n": 0,
+    "win": null,
+    "avg": null
+   }
+  }
  }
 }
