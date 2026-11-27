@@ -1,14 +1,14 @@
 {
- "run_at": "2026-11-26T18:31+08:00",
+ "run_at": "2026-11-27T18:28+08:00",
  "log": [
-  "除權息 2026：1450 筆",
+  "除權息 2026：1451 筆",
   "每日行情新增 1 天、法人新增 1 天"
  ],
  "new_price_days": 1,
  "new_t86_days": 1,
  "stopped_early": false,
  "warnings": [],
- "contiguous_until": "2026-11-26",
- "days_done": 3104,
- "days_total": 3104
+ "contiguous_until": "2026-11-27",
+ "days_done": 3105,
+ "days_total": 3105
 }
