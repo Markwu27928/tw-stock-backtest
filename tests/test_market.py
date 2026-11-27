@@ -204,7 +204,8 @@ def test_rule_probability_is_historical_rate():
     ds = M.intraday_dataset(_fake_intraday(1500))
     x = {"r_at": -0.01, "gap": -0.005, "mom": -0.005, "rng": 0.01}
     pr = market._prob_for("sign_at", ds, M.INTRA_FEATS, x, M.INTRA_RULES)
-    down_days = ds[ds["r_at"] <= 0]
+    # 同方向（跌）且同幅度（0.01 → 大於 1% 這組）的歷史比例
+    down_days = ds[(ds["r_at"] <= 0) & (ds["r_at"].abs() >= 0.01)]
     assert pr["pred_up"] is False and pr["prob_kind"] == "history"
     assert abs(pr["prob_up"] - down_days["y"].mean()) < 1e-12 and pr["prob_n"] == len(down_days)
     assert 0 < pr["prob_up"] < 0.5
@@ -215,3 +216,25 @@ def test_close_interval_scales_with_volatility():
     calm = M.close_forecast(ds, {"r_at": 0.0, "gap": 0.0, "rng": 0.002})
     wild = M.close_forecast(ds, {"r_at": 0.0, "gap": 0.0, "rng": 0.02})
     assert (wild["hi"] - wild["lo"]) > 5 * (calm["hi"] - calm["lo"])
+
+
+def test_probability_uses_same_magnitude_bucket():
+    """小幅度時要用同幅度的歷史比例，並回報這個幅度下的命中率。"""
+    ds = M.intraday_dataset(_fake_intraday(1500))
+    small = market._prob_for("sign_at", ds, M.INTRA_FEATS, {"r_at": -0.001, "gap": 0, "mom": 0, "rng": 0.005}, M.INTRA_RULES)
+    big = market._prob_for("sign_at", ds, M.INTRA_FEATS, {"r_at": -0.02, "gap": 0, "mom": 0, "rng": 0.02}, M.INTRA_RULES)
+    assert small["bucket"] == "小於 0.2%" and big["bucket"] == "大於 1%"
+    hist = ds.dropna(subset=["y"])
+    sel = (hist["r_at"] <= 0) & (hist["r_at"].abs() < 0.002)
+    assert abs(small["prob_up"] - hist.loc[sel, "y"].mean()) < 1e-12 and small["prob_n"] == int(sel.sum())
+    assert big["bucket_acc"] > small["bucket_acc"]          # 幅度大時命中率較高
+
+
+def test_rerun_keeps_original_time():
+    rec = {}
+    market.put(rec, "close", {"status": "ok", "made_at": "13:47", "index": 1})
+    market.put(rec, "close", {"status": "ok", "made_at": "22:25", "index": 2})
+    assert rec["close"]["made_at"] == "13:47" and rec["close"]["rerun_at"] == "22:25" and rec["close"]["index"] == 2
+    market.put(rec, "midday", {"status": "closed", "made_at": "12:40"})
+    market.put(rec, "midday", {"status": "ok", "made_at": "12:50"})
+    assert rec["midday"]["made_at"] == "12:50" and "rerun_at" not in rec["midday"]

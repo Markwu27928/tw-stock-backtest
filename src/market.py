@@ -209,9 +209,41 @@ def _prob_for(method: str, ds: pd.DataFrame, feats: list[str], x: dict, rules: d
         return {"pred_up": p > 0.5, "prob_up": p, "prob_kind": "model", "prob_n": int(len(tr))}
     today_sig = float(rules[method](pd.DataFrame([x])).iloc[0])
     hist = ds.dropna(subset=["y"])
-    same = hist[rules[method](hist) == today_sig]
-    return {"pred_up": today_sig > 0.5, "prob_up": float(same["y"].mean()) if len(same) else None,
-            "prob_kind": "history", "prob_n": int(len(same))}
+    sig = rules[method](hist)
+    same = hist[sig == today_sig]
+    out = {"pred_up": today_sig > 0.5, "prob_up": float(same["y"].mean()) if len(same) else None,
+           "prob_kind": "history", "prob_n": int(len(same))}
+    # 依幅度分組：小幅度時方向很難判斷，要顯示同幅度的歷史命中率，避免給人錯誤的信心
+    f = MAG_FEAT.get(method)
+    if f and f in hist and np.isfinite(x.get(f, np.nan)):
+        b = _bucket(abs(x[f]))
+        mag = hist[f].abs().map(_bucket)
+        same_b = hist[(sig == today_sig) & (mag == b)]
+        in_b = hist[mag == b]
+        hit_b = ((sig[mag == b] > 0.5).astype(int) == in_b["y"]).mean() if len(in_b) else np.nan
+        out.update({"prob_up": float(same_b["y"].mean()) if len(same_b) else out["prob_up"],
+                    "prob_n": int(len(same_b)) if len(same_b) else out["prob_n"],
+                    "bucket": BUCKET_LABELS[b], "bucket_feat": f, "bucket_value": float(x[f]),
+                    "bucket_acc": float(hit_b), "bucket_n": int(len(in_b))})
+    return out
+
+
+MAG_FEAT = {"night": "night_ret", "sign_at": "r_at"}
+BUCKET_EDGES = [0.002, 0.005, 0.01]
+BUCKET_LABELS = ["小於 0.2%", "0.2% 到 0.5%", "0.5% 到 1%", "大於 1%"]
+
+
+def _bucket(v: float) -> int:
+    return int(np.searchsorted(BUCKET_EDGES, v, side="right"))
+
+
+def put(rec: dict, key: str, new: dict) -> None:
+    """寫入一段結果；重跑時保留第一次產生的時間，另外記下重跑時間。"""
+    old = rec.get(key) or {}
+    if old.get("made_at") and old.get("status", "ok") == "ok" and new.get("status", "ok") == "ok" \
+            and new.get("made_at") and new["made_at"] != old["made_at"]:
+        new = dict(new, made_at=old["made_at"], rerun_at=new["made_at"])
+    rec[key] = new
 
 
 # ---------------------------------------------------------------- 任務
@@ -235,7 +267,7 @@ def task_preopen(force=False) -> None:
         ds, lag, stats, method = preopen_model()
     except RuntimeError as e:
         warn(str(e))
-        rec["preopen"] = {"status": "no_model", "made_at": t.strftime("%H:%M"), "msg": str(e)}
+        put(rec, "preopen", {"status": "no_model", "made_at": t.strftime("%H:%M"), "msg": str(e)})
         save_day(rec)
         return
     intr, tx, us = _load_all()
@@ -247,7 +279,7 @@ def task_preopen(force=False) -> None:
     key = today.isoformat() if lag == 0 else prev
     if prev is None or prev not in day.index or key not in night.index:
         warn(f"找不到 {today} 的期貨夜盤資料，今天可能休市或資料尚未公布")
-        rec["preopen"] = {"status": "no_data", "made_at": t.strftime("%H:%M")}
+        put(rec, "preopen", {"status": "no_data", "made_at": t.strftime("%H:%M")})
         save_day(rec)
         return
     u = M.us_returns_for(us, [today.isoformat()])
@@ -256,9 +288,9 @@ def task_preopen(force=False) -> None:
     if method == "logit" and not all(np.isfinite(x[f]) for f in M.PRE_FEATS):
         method = "night"
     pr = _prob_for(method, ds, M.PRE_FEATS, x, M.PRE_RULES)
-    rec["preopen"] = {"status": "ok", "made_at": t.strftime("%H:%M"), "method": method,
+    put(rec, "preopen", {"status": "ok", "made_at": t.strftime("%H:%M"), "method": method,
                       "method_name": M.NAMES[method], **pr,
-                      "inputs": x, "stats": stats, "night_alignment": lag}
+                      "inputs": x, "stats": stats, "night_alignment": lag})
     save_day(rec)
     print(json.dumps(_clean(rec["preopen"]), ensure_ascii=False))
 
@@ -276,26 +308,26 @@ def task_intraday(force=False) -> None:
     q = S.fetch_mis(["t00"]).get("t00")
     if not q or q["date"] != today.strftime("%Y%m%d"):
         print("今天沒有盤中資料，可能休市")
-        rec["intraday"] = {"status": "closed", "made_at": t.strftime("%H:%M")}
+        put(rec, "intraday", {"status": "closed", "made_at": t.strftime("%H:%M")})
         save_day(rec)
         return
     try:
         ds, stats, method, cf_bt = intraday_model()
     except RuntimeError as e:
         warn(str(e))
-        rec["intraday"] = {"status": "no_model", "made_at": t.strftime("%H:%M"), "msg": str(e)}
+        put(rec, "intraday", {"status": "no_model", "made_at": t.strftime("%H:%M"), "msg": str(e)})
         save_day(rec)
         return
     x = {"r_at": q["price"] / q["prev"] - 1, "gap": q["open"] / q["prev"] - 1,
          "mom": q["price"] / q["open"] - 1, "rng": (q["high"] - q["low"]) / q["prev"]}
     pr = _prob_for(method, ds, M.INTRA_FEATS, x, M.INTRA_RULES)
     cf = M.close_forecast(ds, x)
-    rec["intraday"] = {"status": "ok", "made_at": t.strftime("%H:%M"), "quote_time": q["time"],
+    put(rec, "intraday", {"status": "ok", "made_at": t.strftime("%H:%M"), "quote_time": q["time"],
                        "index": q["price"], "prev": q["prev"], "open": q["open"],
                        "method": method, "method_name": M.NAMES[method], **pr,
                        "close_mid": q["prev"] * (1 + cf["ret"]), "close_lo": q["prev"] * (1 + cf["lo"]),
                        "close_hi": q["prev"] * (1 + cf["hi"]), "inputs": x, "stats": stats,
-                       "close_backtest": cf_bt}
+                       "close_backtest": cf_bt})
     save_day(rec)
     print(json.dumps(_clean(rec["intraday"]), ensure_ascii=False))
 
@@ -363,7 +395,7 @@ def task_close(force=False, wait_min: float = 25) -> None:
     q = S.fetch_mis(["t00"]).get("t00")
     if not q or q["date"] != today.strftime("%Y%m%d"):
         print("今天沒有交易，可能休市")
-        rec["close"] = {"status": "closed"}
+        put(rec, "close", {"status": "closed"})
         save_day(rec)
         return
     # 全市場收盤行情：證交所約 13:45~14:30 公布，等到有資料為止
@@ -411,11 +443,11 @@ def task_close(force=False, wait_min: float = 25) -> None:
             if k == "intraday":
                 pr["close_actual"] = q["price"]
                 pr["in_range"] = bool(pr["close_lo"] <= q["price"] <= pr["close_hi"])
-    rec["close"] = c
+    put(rec, "close", c)
     try:
         q2 = S.fetch_mis(RR.ASSETS)
         live = {"t00": q["price"], **{a: close_map.get(a) or (q2.get(a) or {}).get("price") for a in RR.ASSETS}}
-        rec["rule"] = _rule_record(RR.replay(*rule_inputs(live)), now().strftime("%H:%M"), final=True)
+        put(rec, "rule", _rule_record(RR.replay(*rule_inputs(live)), now().strftime("%H:%M"), final=True))
     except Exception as e:  # noqa: BLE001  規則失敗不影響收盤整理
         warn(f"超跌反彈規則收盤確認失敗：{e}")
     save_day(rec)
@@ -468,13 +500,13 @@ def task_midday(force=False) -> None:
     q = S.fetch_mis(["t00"] + RR.ASSETS)
     if not q.get("t00") or q["t00"]["date"] != today.strftime("%Y%m%d"):
         print("今天沒有盤中資料，可能休市")
-        rec["midday"] = {"status": "closed", "made_at": t.strftime("%H:%M")}
+        put(rec, "midday", {"status": "closed", "made_at": t.strftime("%H:%M")})
         save_day(rec)
         return
     live = {"t00": q["t00"]["price"], **{a: (q.get(a) or {}).get("price") for a in RR.ASSETS}}
     res = RR.replay(*rule_inputs(live))
-    rec["midday"] = {"status": "ok", "quote_time": q["t00"]["time"],
-                     **_rule_record(res, t.strftime("%H:%M"), final=False)}
+    put(rec, "midday", {"status": "ok", "quote_time": q["t00"]["time"],
+                     **_rule_record(res, t.strftime("%H:%M"), final=False)})
     save_day(rec)
     print(json.dumps(_clean({k: rec["midday"][k] for k in ("rsi", "lower", "index", "cond", "new")}), ensure_ascii=False))
     if res["new"]:

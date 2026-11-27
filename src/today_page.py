@@ -58,9 +58,21 @@ def _stats_table(stats: dict, chosen: str | None) -> str:
             "回測從 2019 年起逐月滾動，只用過去資料訓練。</p>")
 
 
+def _rerun(p: dict) -> str:
+    return f"（{p['rerun_at']} 重新計算）" if p.get("rerun_at") else ""
+
+
 def _prob_line(p: dict) -> str:
     """規則型方法顯示歷史比例，模型顯示模型機率；舊紀錄沒有 prob_kind 時不顯示 0%/100%。"""
     kind, prob, n = p.get("prob_kind"), p.get("prob_up"), p.get("prob_n")
+    if kind == "history" and prob is not None and p.get("bucket"):
+        what = {"night_ret": "台指期夜盤", "r_at": "09:40 當下"}.get(p.get("bucket_feat"), "訊號")
+        acc = p.get("bucket_acc")
+        warn_ = ("<p class='sub'>⚠️ 這種小幅度時，這個方法的歷史命中率只有 "
+                 f"<b>{_pct(acc, 0)}</b>，接近擲硬幣，參考價值低。</p>") if acc is not None and acc < 0.6 else ""
+        return (f"<p class='sub'>{what}漲跌 {_pct(p.get('bucket_value'), 2, True)}（幅度{p['bucket']}）："
+                f"歷史上同方向、同幅度的 {n:,} 天中，收漲 <b>{_pct(prob, 0)}</b>（收跌 {_pct(1 - prob, 0)}）。"
+                f"這個幅度下的命中率 {_pct(acc, 0)}（{p.get('bucket_n', 0):,} 天）。</p>{warn_}")
     if kind == "history" and prob is not None:
         return (f"<p class='sub'>歷史上出現同樣訊號的 {n:,} 天中，收漲的比例是 <b>{_pct(prob, 0)}</b>"
                 f"（收跌 {_pct(1 - prob, 0)}）</p>")
@@ -81,7 +93,7 @@ def _preopen_html(p: dict, meta: dict) -> str:
     if p.get("hit") is not None:
         res = f"<p class='sub'>收盤結果：{_arrow(p['actual_up'])}，預測{'<b class=ok>命中</b>' if p['hit'] else '未命中'}</p>"
     return (f"<p class='big'>{_arrow(p['pred_up'])}</p>{_prob_line(p)}"
-            f"<p class='sub'>{p['made_at']} 產生・方法：{html.escape(p['method_name'])}</p>{res}"
+            f"<p class='sub'>{p['made_at']} 產生{_rerun(p)}・方法：{html.escape(p['method_name'])}</p>{res}"
             "<div class='scroll'><table><tr><th>依據</th><th>漲跌</th></tr>"
             f"<tr><td>台指期夜盤（對前一日日盤收盤）</td><td class='{_sign_cls(x.get('night_ret'))}'>{_pct(x.get('night_ret'), 2, True)}</td></tr>"
             f"<tr><td>美股 S&amp;P 500</td><td class='{_sign_cls(x.get('spx'))}'>{_pct(x.get('spx'), 2, True)}</td></tr>"
@@ -105,7 +117,7 @@ def _intraday_html(p: dict) -> str:
                f"{'在' if p['in_range'] else '不在'}預測區間內</p>")
     bt = p.get("close_backtest") or {}
     return (f"<p class='big'>{_arrow(p['pred_up'])}</p>{_prob_line(p)}"
-            f"<p class='sub'>{p['made_at']} 產生（報價時間 {html.escape(str(p.get('quote_time', '')))}），"
+            f"<p class='sub'>{p['made_at']} 產生{_rerun(p)}（報價時間 {html.escape(str(p.get('quote_time', '')))}），"
             f"當時加權指數 {_n(p['index'])}（{_pct(p['index'] / p['prev'] - 1, 2, True)}）・方法：{html.escape(p['method_name'])}</p>"
             f"<p class='sub'>收盤預估 <b>{_n(p['close_mid'], 0)}</b>，80% 區間 {_n(p['close_lo'], 0)} ～ {_n(p['close_hi'], 0)}</p>{res}"
             "<details><summary>各方法回測命中率</summary>"
@@ -131,7 +143,7 @@ def _close_html(c: dict) -> str:
         return "<p class='note'>今天休市。</p>"
     b = c.get("breadth") or {}
     out = (f"<p class='big'><span class='{_sign_cls(c['chg'])}'>{_n(c['index'])}　{_pct(c['chg'], 2, True)}</span></p>"
-           f"<p class='sub'>最高 {_n(c.get('high'))}・最低 {_n(c.get('low'))}"
+           f"<p class='sub'>{c.get('made_at', '')} 整理{_rerun(c)}・最高 {_n(c.get('high'))}・最低 {_n(c.get('low'))}"
            + (f"・成交金額 {c['value'] / 1e8:,.0f} 億" if c.get("value") else "") + "</p>")
     if b:
         out += (f"<p class='sub'>上漲 <span class='up'>{b['up']}</span>（漲停 {b['limit_up']}）・"
